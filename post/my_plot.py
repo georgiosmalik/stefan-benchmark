@@ -6,6 +6,11 @@ plt.style.use('ggplot')
 # Use LaTeX fonts
 plt.style.use('tex')
 
+# Custom colors:
+mypalette=[[125/256,0,0],[0,0,125/256],[100/256,151/256,191/256],[159/256,203/256,238/256]]
+myred=[125/256,0,0]
+myblue=[0,0,125/256]
+
 def set_size(width, fraction=1, subplots=(1, 1)):
     """ Set figure dimensions to avoid scaling in LaTeX.
 
@@ -33,18 +38,18 @@ def set_size(width, fraction=1, subplots=(1, 1)):
 
     # Width of figure (in pts)
     fig_width_pt = width_pt * fraction
-    # Convert from pt to inches
-    inches_per_pt = 1 / 72.27
+    # Convert from pt to cm
+    cm_per_pt = 1 / 28.35
 
     # Golden ratio to set aesthetic figure height
     golden_ratio = (5**.5 - 1) / 2
 
-    # Figure width in inches
-    fig_width_in = fig_width_pt * inches_per_pt
-    # Figure height in inches
-    fig_height_in = fig_width_in * golden_ratio * (subplots[0] / subplots[1])
+    # Figure width in cm
+    fig_width_cm = fig_width_pt * cm_per_pt
+    # Figure height in cm
+    fig_height_cm = fig_width_cm * golden_ratio * (subplots[0] / subplots[1])
 
-    return (fig_width_in, fig_height_in)
+    return (fig_width_cm, fig_height_cm)
 
 def graph1d(data,**figprm):
     """ Create a figure and a set of subplots representing one-dimensional plot.
@@ -62,18 +67,27 @@ def graph1d(data,**figprm):
     fig, ax = plt.subplots(1,1)
 
     # Plot the figure
-    for xy in data:
-        ax.plot(xy[0],xy[1])
+    for i,xy in enumerate(data):
+        try:
+            color=figprm.get("color",None)[i]
+        except  TypeError:
+            color=None
+        try:
+            marker=figprm.get("marker",None)[i]
+        except  TypeError:
+            marker=None
+        ax.plot(xy[0],xy[1],color=color,marker=marker)
     # Axes labels
     if "axlabels" in figprm:
         ax.set_xlabel(figprm["axlabels"][0])
         ax.set_ylabel(figprm["axlabels"][1])
-    # Title
-    if "title" in figprm:
-        ax.set_title(figprm["title"])
-    # Legend
-    if "legend" in figprm:
-        ax.legend(figprm["legend"])
+
+    # Set title
+    ax.set_title(figprm.get("title",""))
+
+    # Set legend
+    ax.legend(figprm.get("legend",None))
+    
     # Save figure
     if "savefig" in figprm:
         fig.set_size_inches(set_size(figprm["savefig"]["width"]))

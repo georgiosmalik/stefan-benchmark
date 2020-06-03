@@ -7,7 +7,7 @@
 #------------------------------------------------
 # Material and physical parameters of the problem
 #------------------------------------------------
-# Material parameters:
+# Physical parameters:
 L_m = 335e3               # Latent heat of melting
 rho = 1000.
 rho_l = 1000.            # Density of water (Kowal value: 999.840281167108)
@@ -30,13 +30,10 @@ g = 9.81                  # Gravitational acceleration
 #------------------------------------------------
 # Problem formulation parameters:
 # Geometric:
-# 1d
-L = 1.
-nx = 100
 # 2d,3d
 R1 = 0.1
 R2 = 1.
-mshres = 50
+meshres = 10
 # Physical:
 theta_0 = 373.                      # heating temperature for 1D
 theta_0_3D = 5.                     # heating power for 3D

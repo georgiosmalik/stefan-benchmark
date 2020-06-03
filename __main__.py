@@ -9,9 +9,14 @@
 # Processing: samotna simulace, obsahuje formulaci slabeho problemu, jeho reseni pro casovou evoluci
 # Postprocessing: procedury pro ukladani a vykreslovani vyledku
 
+import os
 import sys
 
 import sim.stefan_benchmark
 
+# Toto nastavi cwd na cestu z ktere se pak mohu odkazovat relativne na dalsi slozky:
+os.chdir(os.path.dirname(__file__))
+
 if __name__ == "__main__":
-    sim.stefan_benchmark.stefan_benchmark(sys.argv[1])()
+    sim.stefan_benchmark.DIM=int(sys.argv[1][0])
+    sim.stefan_benchmark.stefan_benchmark()

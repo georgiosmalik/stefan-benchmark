@@ -109,18 +109,19 @@ def mesh3d(width,depth,height,nx,ny,nz):
 #-------------------------
 # mesh from gmesh file:
 def meshxml(name): # reads mesh from .xml file, cf. Notes
-    # IN: str of name of the .xml file
+    # IN: str of name of the .xml file (do that in serial):
     mesh = dolfin.Mesh(name+'.xml')
+    mesh.init()
     hdf = dolfin.HDF5File(mesh.mpi_comm(),name+"_hdf.h5", "w")
     hdf.write(mesh, "/mesh")
     domains=mesh.domains()
     if os.path.isfile(name+"_physical_region.xml"):
         domains.init(mesh.topology().dim() - 1)
     if os.path.isfile(name+"_facet_region.xml"):
-        boundary = dolfin.MeshFunction("size_t",mesh,name+"_facet_region.xml")
-        mesh.init()
-        hdf.write(boundary, "/boundary")
-        ds = dolfin.Measure("ds", subdomain_data = boundary)
+        boundary = (dolfin.MeshFunction("size_t",mesh,name+"_facet_region.xml"),{'inner':1,'outer':2})
+        #mesh.init()
+        hdf.write(boundary[0], "/boundary")
+        ds = dolfin.Measure("ds", subdomain_data = boundary[0])
     else:
         boundary = (dolfin.MeshFunction("size_t", mesh, mesh.topology().dim()-1,0),{})
         width = mesh.coordinates()[:,0].max()
@@ -148,13 +149,12 @@ def meshxml(name): # reads mesh from .xml file, cf. Notes
     return (mesh,boundary,n,dx,ds)
 #-------------------------
 # mesh from hdf file:
-def mesh_hdf(name):
+def meshhdf(name):
     mesh = dolfin.Mesh()
     hdf = dolfin.HDF5File(mesh.mpi_comm(),name+"_hdf.h5","r")
     hdf.read(mesh,"/mesh",False)
-    boundary = (dolfin.MeshFunction('size_t',mesh,mesh.topology().dim()-1),{})
+    boundary = (dolfin.MeshFunction('size_t',mesh,mesh.topology().dim()-1,0),{'inner':1,'outer':2})
     hdf.read(boundary[0],"/boundary")
-    hdf.read(boundary[1],"/boundary_index")
     n = dolfin.FacetNormal(mesh)
     dx = dolfin.Measure("dx", mesh)
     ds = dolfin.Measure("ds", subdomain_data = boundary[0])

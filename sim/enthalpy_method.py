@@ -13,7 +13,7 @@ import numpy as np
 from ufl import tanh
 
 # Mollification constants
-eps = 0.1
+eps = 0.6
 deg = 'Cinf'
 
 #---------------------------------
@@ -128,7 +128,7 @@ def df(x, x0=0.0, eps=eps, deg=deg):
                 else:
                     y[pos] = 0
             return y
-        return dolfin.conditional(abs(x-x0)<eps,1.0/(2*eps), 0)
+        return dolfin.conditional(abs(x-x0)<eps,1.0/(2*eps), 0.)
     
     # C0 approximation
     def df_C0():
@@ -174,7 +174,7 @@ def mollify(xminus, xplus, x, x0=0.0, eps=eps, deg=deg):
 
 def dirac(xvalue, x, x0=0.0, eps=eps, deg=deg):
     """Return dirac with L1 norm of xvalue."""
-    return xvalue*df(x, x0, eps, deg)()
+    return xvalue*df(x,x0,eps,deg)()
 # #---------------------------------
 # # Enthalpy method formulation from Cao, 1990:
 # # Source term:
