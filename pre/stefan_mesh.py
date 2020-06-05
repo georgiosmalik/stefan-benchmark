@@ -16,7 +16,7 @@ def stefan_mesh(dim):
         return msh.mesh1d(prm.R1,prm.R2,prm.meshres)
     def stefan_mesh_2d():
         prm.R1=0.1
-        prm.mshres=20
+        prm.meshres=20
         return msh.mesh2d(prm.R1,prm.R2,prm.meshres)
     def stefan_mesh_3d():
         # The mesh was generated as a spherical shell between R1=0.2 and R2=1

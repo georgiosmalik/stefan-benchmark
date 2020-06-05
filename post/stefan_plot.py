@@ -27,81 +27,6 @@ linestyle={"analytic":{"color":mplt.mypalette[0],
                   "markevery":(0.66,0.1)}
 }
 
-# Pomocne veliciny pro vykreslovani grafu teplotnich poli:
-        # color_id=1
-        # names=[]
-        # plots=[]
-
-# Vykreslovani teplotniho pole 2d:
-#     if t in plot_timeset:
-#         x_range = np.arange(prm.R1,prm.R2,0.001)
-#         y_range = x_range*0.0
-#         for i,x in enumerate(x_range):
-#             xp=dolfin.Point(x)
-#             if bbox.compute_collisions(xp):
-#                 y_range[i]=theta_analytic(xp)
-#         if rank==0:
-#             for process in range(comm.size)[1:]:
-#                 y=comm.recv(source=process)
-#                 y_range=np.maximum(y_range,y)
-#         if rank!=0:
-#             comm.send(y_range,dest=0)
-#         if rank==0:
-#             plt.plot(x_range,
-#                      y_range,
-#                      label="analytic solution",
-#                      lw=2.,
-#                      color=mplt.mypalette[color_id],
-#                      #color=linestyle["analytic"]["color"],
-#                      marker=splt.linestyle["analytic"]["marker"]
-#             )
-
-#         names.append("$t="+str(t)+"\,\mathrm{s}$")
-#         methodplots=()
-#         for method in methods:
-#             for i,x in enumerate(x_range):
-#                 xp=dolfin.Point(x)
-#                 if bbox.compute_collisions(xp):
-#                     y_range[i]=sim[method][1](xp)
-#             if rank==0:
-#                 for process in range(comm.size)[1:]:
-#                     y=comm.recv(source=process)
-#                     y_range=np.maximum(y_range,y)
-#             if rank!=0:
-#                 comm.send(y_range,dest=0)
-#             if rank==0:
-#                 plot,=plt.plot(x_range,
-#                                y_range,
-#                                label=method,
-#                                linestyle='None',
-#                                color=mplt.mypalette[color_id],
-#                                marker=splt.linestyle[method]["marker"],
-#                                markevery=splt.linestyle[method]["markevery"]
-#                 )
-#                 methodplots=methodplots+(plot,)
-#         if rank==0:
-#             plots.append(methodplots)
-#         color_id=color_id+1
-
-# #------------------------------
-# # Vytvareni dvou legend grafu, jedna pro metody, druha pro casy
-# if rank==0:
-#     first_legend_elements = [Line2D([0],[0],color=mplt.mypalette[1],label='analytic')]
-#     for method in methods:
-#         leg_element=Line2D([0],[0],color=mplt.mypalette[1],marker=splt.linestyle[method]["marker"],linestyle='None',label=method)
-#         first_legend_elements.append(leg_element)
-#     first_legend=plt.legend(handles=first_legend_elements,loc="upper right")
-#     ax2 = plt.gca().add_artist(first_legend)
-#     fig.legend(plots,names,loc="lower left",handler_map={tuple: HandlerTuple(ndivide=3)})
-#     #------------------------------
-#     # Uloz obrazek teplotniho pole:
-#     fig.set_size_inches(mplt.set_size(345./2))
-#     fig.savefig('./out/fig/'+str(DIM)+'d/temp_dist.pdf', format='pdf', bbox_inches='tight', transparent=False)
-#     #plt.legend(loc="upper right")
-#     #plt.show()
-#     #mplt.graph1dstefan()
-#     #--------------------------------------------
-
 def graph_temp(dat_timeset,plot_timeset,theta_analytic,sim,data_hdf,comm,rank,bbox):
 
     fig, ax = plt.subplots(1,1)
@@ -256,7 +181,7 @@ def graph_temp_diff(dat_timeset,plot_timeset,theta_analytic,sim,data_hdf,comm,ra
         fig.savefig('./out/fig/'+str(DIM)+'d/temp_dist_diff.pdf', format='pdf', bbox_inches='tight', transparent=False)
         #--------------------------------------------
 
-# Vykresleni grafu pozice metling fronty:
+# Graph melting front position:
 def graph_front_pos(dat_timeset,lambda_,front_positions,offset=False):
     plot_data=[[dat_timeset,2*lambda_*np.sqrt(dat_timeset)]]
     legend=['analytic']
@@ -269,10 +194,11 @@ def graph_front_pos(dat_timeset,lambda_,front_positions,offset=False):
         legend.append(method)
     mplt.graph1d(plot_data,color=mplt.mypalette,legend=legend,savefig={"width":345./2,"name":'./out/fig/'+str(DIM)+'d/front_pos.pdf'},)
 
+# Graph difference between FEM and analytic melting front position:
 def graph_front_pos_diff(dat_timeset,lambda_,front_positions):
     plot_data=[]
     legend=[]
     for method in front_positions:
-        plot_data.append([timeset,front_positions[method]-2*lambda_*np.sqrt(dat_timeset)])
+        plot_data.append([dat_timeset,front_positions[method]-2*lambda_*np.sqrt(dat_timeset)])
         legend.append(method)
     mplt.graph1d(plot_data,color=mplt.mypalette[1:],legend=legend,savefig={"width":345./2,"name":'./out/fig/'+str(DIM)+'d/front_pos_diff.pdf'},)

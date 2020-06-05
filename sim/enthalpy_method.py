@@ -13,7 +13,7 @@ import numpy as np
 from ufl import tanh
 
 # Mollification constants
-eps = 0.6
+eps = 0.4
 deg = 'Cinf'
 
 #---------------------------------

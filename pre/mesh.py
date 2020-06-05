@@ -35,7 +35,7 @@ def mesh1d(left,right,meshres):
 def mesh2d(inner,outer,*meshres,stefan=True):
     origin = dolfin.Point(0.,0.)
     if stefan:
-        geometry=mshr.Circle(origin, outer, meshres[0]) - mshr.Circle(origin, inner)
+        geometry=mshr.Circle(origin, outer, 2*meshres[0]) - mshr.Circle(origin, inner, int(0.5*meshres[0]))
         mesh=mshr.generate_mesh(geometry, meshres[0])
         mesh.init()
         # Construct of the facet markers:

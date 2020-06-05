@@ -33,7 +33,7 @@ g = 9.81                  # Gravitational acceleration
 # 2d,3d
 R1 = 0.1
 R2 = 1.
-meshres = 10
+meshres = 20
 # Physical:
 theta_0 = 373.                      # heating temperature for 1D
 theta_0_3D = 5.                     # heating power for 3D
