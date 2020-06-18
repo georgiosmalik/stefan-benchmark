@@ -14,9 +14,18 @@ import sys
 
 import sim.stefan_benchmark
 
+from pathlib import Path
+
 # Toto nastavi cwd na cestu z ktere se pak mohu odkazovat relativne na dalsi slozky:
 os.chdir(os.path.dirname(__file__))
 
 if __name__ == "__main__":
-    sim.stefan_benchmark.DIM=int(sys.argv[1][0])
+    dim=int(sys.argv[1][0])
+
+    # Creates directories for output:
+    Path("./out/data/"+str(dim)+"d").mkdir(parents=True,exist_ok=True)
+    Path("./out/fig/"+str(dim)+"d").mkdir(parents=True,exist_ok=True)
+
+    # Run simulation:
+    sim.stefan_benchmark.DIM=dim
     sim.stefan_benchmark.stefan_benchmark()

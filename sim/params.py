@@ -35,6 +35,7 @@ R1 = 0.1
 R2 = 1.
 meshres = 20
 # Physical:
+q_0=100                           # heat flux from source in origin
 theta_0 = 373.                      # heating temperature for 1D
 theta_0_3D = 5.                     # heating power for 3D
 theta_m = 273.                      # melting temperature

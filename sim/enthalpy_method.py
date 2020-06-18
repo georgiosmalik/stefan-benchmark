@@ -103,8 +103,8 @@ def heaviside(x, x0=0.0, eps=eps, deg=deg):
     # Cinf approximation
     def hs_Cinf():
         if type(x) == np.ndarray:
-            return 0.5*np.tanh(10*(x-float(x0))/eps) + 0.5
-        return 0.5*tanh(10*(x-x0)/eps) + 0.5
+            return 0.5*np.tanh(2.5*(x-float(x0))/eps) + 0.5
+        return 0.5*tanh(2.5*(x-x0)/eps) + 0.5
         
     degswitch = {
         'exact': hs_exact,

@@ -18,12 +18,15 @@
 # 2. prostor funkci muzu dostat z objektu DirichletBC, neni tedy treba ve stefan_functionspaces vracet zvlast function space a zvlast boundary_condition
 # DONE 3. sloucit hledani lambdy a presne reseni?
 # DONE (ANO) 4. lze ukladat vse do jednoho xdmf souboru?
-# 5. vykreslovani dat do samostatneho souboru postprocessingu?
+# DONE 5. vykreslovani dat do samostatneho souboru postprocessingu?
 # DONE 6. prirazeni okrajovek a toku podle schematu formulace-samostatna funkce
 # DONE (zbytecne pro tento program) 7. MeshFunction, ktera umozni obarvovat hranice stringem, "inner","outer"
-# 8. Zajistit vytvoreni adresarove struktury pro ukladani dat
-# 9. Dodelat nelinearni formulace do definic forem
+# DONE 8. Zajistit vytvoreni adresarove struktury pro ukladani dat
+# DONE 9. Dodelat nelinearni formulace do definic forem
 # 10. stefan_form_em,... jako objekty?
+
+# Ukoly navic:
+# 1. Zjistit proc nefunguje tvoje formulace LS.
 
 
 import dolfin
@@ -43,7 +46,7 @@ from scipy.optimize import fsolve
 from math import floor, ceil
 
 # IMPORTANT FOR NON-LINEAR FORM----------
-dolfin.parameters['form_compiler']['quadrature_degree'] = 8
+dolfin.parameters['form_compiler']['quadrature_degree']=10
 # ---------------------------------------
 
 dolfin.set_log_level(30)
@@ -51,6 +54,15 @@ dolfin.set_log_level(30)
 # Global parameters of the simulation
 DIM=0
 BOUNDARY_FORMULATION="DN"
+
+# Starting and ending radius of simulation
+R_START=0.4
+R_END=0.8
+
+# CFL condition constant
+C_CFL=0.01
+
+# Number of timesteps, overridden by CFL condition
 TIMESTEPS=1000
 
 def stefan_analytic_sol(dim, ploteq=False):
@@ -68,7 +80,10 @@ def stefan_analytic_sol(dim, ploteq=False):
     def theta_sol_1d():
                 
         def transcendental_eq_1d(savefig):
-            f = lambda x : prm.rho*prm.L_m*np.sqrt(np.pi)*x + prm.k_l/np.sqrt(prm.kappa_l)*(prm.theta_m - prm.theta_0)/erf(x/np.sqrt(prm.kappa_l))*np.exp(-x*x/prm.kappa_l) + prm.k_s/np.sqrt(prm.kappa_s)*(prm.theta_m - prm.theta_inf)/erfc(x/np.sqrt(prm.kappa_s))*np.exp(-x*x/prm.kappa_s)
+            #f = lambda x : prm.rho*prm.L_m*np.sqrt(np.pi)*x + prm.k_l/np.sqrt(prm.kappa_l)*(prm.theta_m - prm.theta_0)/erf(x/np.sqrt(prm.kappa_l))*np.exp(-x*x/prm.kappa_l) + prm.k_s/np.sqrt(prm.kappa_s)*(prm.theta_m - prm.theta_inf)/erfc(x/np.sqrt(prm.kappa_s))*np.exp(-x*x/prm.kappa_s)
+
+            # podle clanku:
+            f=lambda x: prm.rho*prm.L_m*x-prm.q_0*np.exp(-x*x/prm.kappa_l)+prm.k_s/np.sqrt(prm.kappa_s*np.pi)*(prm.theta_m - prm.theta_inf)/erfc(x/np.sqrt(prm.kappa_s))*np.exp(-x*x/prm.kappa_s)
             lambda_ = fsolve(f,0.00001)
             if savefig:
                 ax, _ = graph_transcendental_eq(lambda_,f,1)
@@ -78,15 +93,21 @@ def stefan_analytic_sol(dim, ploteq=False):
         lambda_=transcendental_eq_1d(ploteq)
 
         # Analytic solution cpp code:
-        code_analytic="""x[0] < 2*lambda_*sqrt(t) ? theta_0 + (theta_m - theta_0)/erf(lambda_/sqrt(kappa_l))*erf(x[0]/(2*sqrt(t*kappa_l))) : theta_inf + (theta_m - theta_inf)/erfc(lambda_/sqrt(kappa_s))*erfc(x[0]/(2*sqrt(t*kappa_s)))"""
+        #code_analytic="""x[0] < 2*lambda_*sqrt(t) ? theta_0 + (theta_m - theta_0)/erf(lambda_/sqrt(kappa_l))*erf(x[0]/(2*sqrt(t*kappa_l))) : theta_inf + (theta_m - theta_inf)/erfc(lambda_/sqrt(kappa_s))*erfc(x[0]/(2*sqrt(t*kappa_s)))"""
+
+        # podle clanku:
+        code_analytic="""x[0] < 2*lambda_*sqrt(t) ? q_0*sqrt(kappa_l*pi)/k_l*(erf(lambda_/sqrt(kappa_l))-erf(x[0]/(2*sqrt(kappa_l*t))))+theta_m : theta_inf + (theta_m - theta_inf)/erfc(lambda_/sqrt(kappa_s))*erfc(x[0]/(2*sqrt(t*kappa_s)))"""
         
-        theta_analytic=dolfin.Expression(code_analytic,lambda_=lambda_, t=0.1, theta_m=prm.theta_m, theta_0=prm.theta_0, theta_inf=prm.theta_inf, kappa_l=prm.kappa_l, kappa_s=prm.kappa_s, degree=3)
+        theta_analytic=dolfin.Expression(code_analytic,lambda_=lambda_, t=0.1, q_0=prm.q_0, theta_m=prm.theta_m, theta_0=prm.theta_0, theta_inf=prm.theta_inf, k_l=prm.k_l, kappa_l=prm.kappa_l, kappa_s=prm.kappa_s, degree=3)
 
         # cpp code heat flux:
         code_flux='-k*C1*exp(-r*r/(4*t*kappa))/sqrt(t)'
 
         # Heat influx:
-        q_in=dolfin.Expression(code_flux, t=0.1, k=prm.k_l, C1=(prm.theta_m-prm.theta_0)/(erf(lambda_/np.sqrt(prm.kappa_l))*np.sqrt(np.pi*prm.kappa_l)), r=prm.R1, kappa=prm.kappa_l, degree=0)
+        #q_in=dolfin.Expression(code_flux, t=0.1, k=prm.k_l, C1=(prm.theta_m-prm.theta_0)/(erf(lambda_/np.sqrt(prm.kappa_l))*np.sqrt(np.pi*prm.kappa_l)), r=prm.R1, kappa=prm.kappa_l, degree=0)
+
+        # podle clanku:
+        q_in=dolfin.Expression(code_flux, t=0.1, k=prm.k_l, C1=prm.q_0/prm.k_l, r=prm.R1, kappa=prm.kappa_l, degree=0)
 
         # Heat outflux:
         q_out=dolfin.Expression(code_flux, t=0.1, k=prm.k_s, C1=(prm.theta_m-prm.theta_inf)/(erfc(lambda_/np.sqrt(prm.kappa_s))*np.sqrt(np.pi*prm.kappa_s)), r=prm.R2, kappa=prm.kappa_s, degree=0)
@@ -96,11 +117,18 @@ def stefan_analytic_sol(dim, ploteq=False):
     def theta_sol_2d():
 
         def transcendental_eq_2d(savefig):
+            
             f = lambda x : prm.rho*prm.L_m*x**2 - prm.k_l*prm.theta_0*np.exp(-(x**2)/(prm.kappa_l)) + prm.k_s*(prm.theta_m-prm.theta_inf)*np.exp(-(x**2)/prm.kappa_s)/(-expi(-(x**2)/prm.kappa_s))
+
+            # podle clanku:
+            f = lambda x : prm.rho*prm.L_m*x**2 - prm.q_0/(4*np.pi)*np.exp(-(x**2)/(prm.kappa_l)) - prm.k_s*(prm.theta_m-prm.theta_inf)*np.exp(-(x**2)/prm.kappa_s)/(expi(-(x**2)/prm.kappa_s))
+            
             lambda_ = fsolve(f,0.00001)
+            
             if savefig:
                 ax, _ = graph_transcendental_eq(lambda_,f,2)
                 ax.axhline(y=0, lw=1, color='k')
+                
             return lambda_[0]
 
         lambda_=transcendental_eq_2d(ploteq)
@@ -121,7 +149,7 @@ def stefan_analytic_sol(dim, ploteq=False):
         {
         public:
 
-          double t, theta_inf, theta_m, kappa_l, kappa_s, lambda_, theta_0;
+          double t, theta_inf, theta_m, kappa_l, kappa_s, lambda_, c_2d;
           // Analytical solution, returns one value
           StefanAnalytic2d() : dolfin::Expression() {};
           // Function for evaluating expression
@@ -130,7 +158,7 @@ def stefan_analytic_sol(dim, ploteq=False):
             double f_l = (x[0]*x[0]+x[1]*x[1])/(4*kappa_l*t) ;
             double f_s = (x[0]*x[0]+x[1]*x[1])/(4*kappa_s*t) ;
             if ( sqrt(x[0]*x[0]+x[1]*x[1]) <= 2*lambda_*sqrt(t) ) {
-               values[0] = theta_m + theta_0*expint(-lambda_*lambda_/kappa_l) - theta_0*expint(-f_l);
+               values[0] = theta_m + c_2d*(expint(-lambda_*lambda_/kappa_l) - expint(-f_l));
             }
             else {
                values[0] = theta_inf - (theta_inf - theta_m)/expint(-lambda_*lambda_/kappa_s)*expint(-f_s);
@@ -147,7 +175,7 @@ def stefan_analytic_sol(dim, ploteq=False):
             .def_readwrite("kappa_s", &StefanAnalytic2d::kappa_s)
             .def_readwrite("lambda_", &StefanAnalytic2d::lambda_)
             .def_readwrite("theta_m", &StefanAnalytic2d::theta_m)
-            .def_readwrite("theta_0", &StefanAnalytic2d::theta_0)
+            .def_readwrite("c_2d", &StefanAnalytic2d::c_2d)
             .def_readwrite("theta_inf", &StefanAnalytic2d::theta_inf)
             .def_readwrite("t", &StefanAnalytic2d::t);
         }
@@ -157,27 +185,47 @@ def stefan_analytic_sol(dim, ploteq=False):
                                       kappa_l=prm.kappa_l,
                                       kappa_s=prm.kappa_s,
                                       theta_m=prm.theta_m,
-                                      theta_0=prm.theta_0,
+                                      c_2d=prm.theta_0,
+                                      theta_inf=prm.theta_inf,
+                                      lambda_=lambda_,
+                                      t=0.1,
+                                      degree=3)
+
+        # podle clanku:
+        theta_analytic = dolfin.CompiledExpression(dolfin.compile_cpp_code(code_analytic).StefanAnalytic2d(),
+                                      kappa_l=prm.kappa_l,
+                                      kappa_s=prm.kappa_s,
+                                      theta_m=prm.theta_m,
+                                      c_2d=prm.q_0/(4*np.pi*prm.k_l),
                                       theta_inf=prm.theta_inf,
                                       lambda_=lambda_,
                                       t=0.1,
                                       degree=3)
 
         # 2d heat flux cpp code:
-        code_flux='-k*C1*2*exp(-r*r/(4*kappa*t))/r'
+        code_flux='-k*c_2d*2*exp(-r*r/(4*kappa*t))/r'
 
         # Heat influx:
-        q_in=dolfin.Expression(code_flux, t=0.1, k=prm.k_l, C1=-prm.theta_0, r=prm.R1, kappa=prm.kappa_l, degree=0)
+        q_in=dolfin.Expression(code_flux, t=0.1, k=prm.k_l, c_2d=-prm.theta_0, r=prm.R1, kappa=prm.kappa_l, degree=0)
+
+        # podle clanku:
+        q_in=dolfin.Expression(code_flux, t=0.1, k=prm.k_l, c_2d=-prm.q_0/(2*np.pi*prm.k_l), r=prm.R1, kappa=prm.kappa_l, degree=0)
 
         # Heat outflux:
-        q_out=dolfin.Expression(code_flux, t=0.1, k=prm.k_s, C1=-(prm.theta_m-prm.theta_inf)/expi(-lambda_**2/prm.kappa_s), r=prm.R2, kappa=prm.kappa_s, degree=0)
+        q_out=dolfin.Expression(code_flux, t=0.1, k=prm.k_s, c_2d=-(prm.theta_m-prm.theta_inf)/expi(-lambda_**2/prm.kappa_s), r=prm.R2, kappa=prm.kappa_s, degree=0)
         return lambda_, theta_analytic, q_in, q_out
 
     def theta_sol_3d():
 
         def transcendental_eq_3d(savefig):
+            
             f = lambda x : prm.rho*prm.L_m*x**3 - prm.k_l*np.sqrt(prm.kappa_l)*prm.theta_0*np.exp(-(x**2)/prm.kappa_l) + prm.k_s*np.sqrt(prm.kappa_s)*(prm.theta_m - prm.theta_inf)*np.exp(-(x**2)/prm.kappa_s)/((-2)*gamma(0.5)*gammaincc(0.5,x**2/prm.kappa_s) + 2*np.sqrt(prm.kappa_s)/x*np.exp(-x**2/prm.kappa_s))
+
+            # podle clanku:
+            f = lambda x : prm.rho*prm.L_m*x**3 - prm.q_0/(16*np.pi)*np.exp(-(x**2)/prm.kappa_l) + prm.k_s*np.sqrt(prm.kappa_s)*(prm.theta_m - prm.theta_inf)*np.exp(-(x**2)/prm.kappa_s)/((-2)*gamma(0.5)*gammaincc(0.5,x**2/prm.kappa_s) + 2*np.sqrt(prm.kappa_s)/x*np.exp(-x**2/prm.kappa_s))
+
             lambda_ = fsolve(f,0.00001)
+            
             if savefig:
                 ax, _ = graph_transcendental_eq(lambda_,f,3)
                 ax.axhline(y=0, lw=1, color='k')
@@ -201,7 +249,7 @@ def stefan_analytic_sol(dim, ploteq=False):
         {
         public:
 
-          double t, theta_inf, theta_m, kappa_l, kappa_s, lambda_, theta_0;
+          double t, theta_inf, theta_m, kappa_l, kappa_s, lambda_, c_3d;
           
           // Analytical solution, returns one value
           StefanAnalytic3d() : dolfin::Expression() {};
@@ -211,7 +259,7 @@ def stefan_analytic_sol(dim, ploteq=False):
             double f_l = (x[0]*x[0]+x[1]*x[1]+x[2]*x[2])/(4*kappa_l*t) ;
             double f_s = (x[0]*x[0]+x[1]*x[1]+x[2]*x[2])/(4*kappa_s*t) ;
             if ( sqrt(x[0]*x[0]+x[1]*x[1]+x[2]*x[2]) <= 2*lambda_*sqrt(t) ) {
-               values[0] = theta_0*(-2*tgamma(0.5,f_l) + 2*sqrt(1/f_l)*exp(-f_l)) + theta_m - theta_0*(-2*tgamma(0.5,lambda_*lambda_/kappa_l) + 2*sqrt(kappa_l)/lambda_*exp(-lambda_*lambda_/kappa_l));
+               values[0] = theta_m + c_3d*((-2*tgamma(0.5,f_l) + 2*sqrt(1/f_l)*exp(-f_l))  - (-2*tgamma(0.5,lambda_*lambda_/kappa_l) + 2*sqrt(kappa_l)/lambda_*exp(-lambda_*lambda_/kappa_l)));
             }
             else {
                values[0] = theta_inf - (theta_inf - theta_m)/(-2*tgamma(0.5,lambda_*lambda_/kappa_s) + 2*sqrt(kappa_s)/lambda_*exp(-lambda_*lambda_/kappa_s))*(-2*tgamma(0.5,f_s) + 2*sqrt(1/f_s)*exp(-f_s));
@@ -228,7 +276,7 @@ def stefan_analytic_sol(dim, ploteq=False):
             .def_readwrite("kappa_s", &StefanAnalytic3d::kappa_s)
             .def_readwrite("lambda_", &StefanAnalytic3d::lambda_)
             .def_readwrite("theta_m", &StefanAnalytic3d::theta_m)
-            .def_readwrite("theta_0", &StefanAnalytic3d::theta_0)
+            .def_readwrite("c_3d", &StefanAnalytic3d::c_3d)
             .def_readwrite("theta_inf", &StefanAnalytic3d::theta_inf)
             .def_readwrite("t", &StefanAnalytic3d::t);
         }
@@ -239,20 +287,34 @@ def stefan_analytic_sol(dim, ploteq=False):
                                                    kappa_l=prm.kappa_l,
                                                    kappa_s=prm.kappa_s,
                                                    theta_m=prm.theta_m,
-                                                   theta_0=prm.theta_0,
+                                                   c_3d=prm.theta_0,
+                                                   theta_inf=prm.theta_inf,
+                                                   lambda_=lambda_,
+                                                   t=0.1,
+                                                   degree=3)
+
+        # podle clanku:
+        theta_analytic = dolfin.CompiledExpression(dolfin.compile_cpp_code(code_analytic).StefanAnalytic3d(),
+                                                   kappa_l=prm.kappa_l,
+                                                   kappa_s=prm.kappa_s,
+                                                   theta_m=prm.theta_m,
+                                                   c_3d=prm.q_0/(16*np.pi*np.sqrt(prm.kappa_l)*prm.k_l),
                                                    theta_inf=prm.theta_inf,
                                                    lambda_=lambda_,
                                                    t=0.1,
                                                    degree=3)
 
         # 3d heat flux cpp code:
-        code_flux='-k*C1*(-4)*exp(-r*r/(4*kappa*t))*sqrt(kappa*t)/(r*r)'
+        code_flux='-k*c_3d*(-4)*exp(-r*r/(4*kappa*t))*sqrt(kappa*t)/(r*r)'
 
         # Heat influx:
-        q_in=dolfin.Expression(code_flux, t=0.1, k=prm.k_l, C1=prm.theta_0, r=prm.R1, kappa=prm.kappa_l, degree=0)
+        q_in=dolfin.Expression(code_flux, t=0.1, k=prm.k_l, c_3d=prm.theta_0, r=prm.R1, kappa=prm.kappa_l, degree=0)
+
+        # podle clanku:
+        q_in=dolfin.Expression(code_flux, t=0.1, k=prm.k_l, c_3d=prm.q_0/(16*np.pi*np.sqrt(prm.kappa_l)*prm.k_l), r=prm.R1, kappa=prm.kappa_l, degree=0)
 
         # Heat outflux:
-        q_out=dolfin.Expression(code_flux, t=0.1, k=prm.k_s, C1=-(prm.theta_m-prm.theta_inf)/((-2)*gamma(0.5)*gammaincc(0.5,lambda_**2/prm.kappa_s) + 2*np.sqrt(prm.kappa_s)/lambda_*np.exp(-lambda_**2/prm.kappa_s)), r=prm.R2, kappa=prm.kappa_s, degree=0)
+        q_out=dolfin.Expression(code_flux, t=0.1, k=prm.k_s, c_3d=-(prm.theta_m-prm.theta_inf)/((-2)*gamma(0.5)*gammaincc(0.5,lambda_**2/prm.kappa_s) + 2*np.sqrt(prm.kappa_s)/lambda_*np.exp(-lambda_**2/prm.kappa_s)), r=prm.R2, kappa=prm.kappa_s, degree=0)
         
         return lambda_, theta_analytic, q_in, q_out
     
@@ -272,20 +334,34 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
     
     def stefan_loop_timesets():
         # Nastav pocatecni a koncovy cas podle presne polohy fronty tani:
-        t_start=(0.4/(2*lambda_))**2
-        t_end=(0.8/(2*lambda_))**2
+        t_start=(R_START/(2*lambda_))**2
+        t_end=(R_END/(2*lambda_))**2
 
-        # Nastav casovy krok na zaklade globalni promenne TIMESTEPS
+        # Set timestep based on standart CFL condition:
+        hmin=mesh.hmin()
+
+        # Maximal velocity of melting front:
+        vmax=lambda_/np.sqrt(t_start)
+
         global dt
-        dt=int((t_end-t_start)/TIMESTEPS)
+
+        # Timestep given by CFL:
+        dt=C_CFL*hmin/vmax
+
+        # Timestep given by number of TIMESTEPS:
+        #dt=int((t_end-t_start)/TIMESTEPS)
 
         # Vytvor timeset pro simulaci:
         sim_timeset=np.arange(t_start,t_end,dt)
 
         # Vytvor timeset pro ukladani:
         numdats=100
-        idx_dats=np.round(np.linspace(0,len(sim_timeset)-1,numdats)).astype(int)
-        dat_timeset=sim_timeset[idx_dats]
+
+        if numdats >= len(sim_timeset):
+            dat_timeset=sim_timeset
+        else:
+            idx_dats=np.round(np.linspace(0,len(sim_timeset)-1,numdats)).astype(int)
+            dat_timeset=sim_timeset[idx_dats]
 
         # Vytvor timeset pro vykreslovani:
         numplots=3
@@ -294,21 +370,16 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
         
         return sim_timeset, dat_timeset, plot_timeset
 
-    def stefan_function_spaces(degree=1, nonlinear=False):
+    def stefan_function_spaces(degree=2):
         # Tohle by melo vracet definice prostoru a funkce
         T_ele = dolfin.FiniteElement("CG", mesh.ufl_cell(), degree)
         T = dolfin.FunctionSpace(mesh, T_ele)
         
         boundary_conditions=[dolfin.DirichletBC(T,theta_analytic,boundary[0],1),dolfin.DirichletBC(T,theta_analytic,boundary[0],2)]
         
-        if nonlinear:
-            theta = dolfin.Function(T)
-            theta_ = dolfin.TestFunction(T)
-            _theta = dolfin.Function(T)
-        else:    
-            theta = dolfin.Function(T)
-            _theta = dolfin.TrialFunction(T)
-            theta_ = dolfin.TestFunction(T)
+        theta = dolfin.Function(T)
+        _theta = dolfin.TrialFunction(T)
+        theta_ = dolfin.TestFunction(T)
             
         return (T,boundary_conditions,theta,_theta,theta_)
 
@@ -319,7 +390,7 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
 
     # Metoda na vypocet pozice fronty
     def stefan_front_position(theta):
-        vol_ice=dolfin.assemble(em.mollify(1,0,theta,x0=prm.theta_m,eps=0.4,deg='disC')*dx)
+        vol_ice=dolfin.assemble(em.mollify(1,0,theta,x0=prm.theta_m,eps=0.4,deg='Cinf')*dx)
         def front_pos_1d():
             return (prm.R2-vol_ice)
         def front_pos_2d():
@@ -350,7 +421,7 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                 bc_form=bc[floor(0+i):ceil(1+i)]
                 return q_form, bc_form
                 
-            def stefan_form_em():
+            def stefan_form_em(nonlinear=False):
                 # Vrat formulaci pro enthalpy method
                 
                 # Definuj prostor funkci:
@@ -364,15 +435,26 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                 def k_eff(theta):
                     return em.mollify(prm.k_s,prm.k_l,theta,x0=prm.theta_m,deg='C0')
                 def c_p_eff(theta):
-                    return em.mollify(prm.cp_s,prm.cp_l,theta,x0=prm.theta_m,deg='C0')+em.dirac(prm.cp_m+prm.L_m,theta,x0=prm.theta_m,deg='C0')
+                    return em.mollify(prm.cp_s,prm.cp_l,theta,x0=prm.theta_m,deg='C1')+em.dirac(prm.cp_m+prm.L_m,theta,x0=prm.theta_m,deg='C1')
 
+                # Nonlinear formulation:
+                if nonlinear:
+                    
+                    F=k_eff(theta)*dolfin.inner(dolfin.grad(theta),dolfin.grad(theta_))*dx+prm.rho*c_p_eff(theta)/dt*(dolfin.inner(theta,theta_)-dolfin.inner(theta_k,theta_))*dx-sum(q_form)
+
+                    problem = dolfin.NonlinearVariationalProblem(F,theta,bcs=bc_form,J=dolfin.derivative(F,theta))
+                    solver = dolfin.NonlinearVariationalSolver(problem)
+
+                    return solver, theta, theta_k
+                    
                 # Linear formulation:
                 F = k_eff(theta_k)*dolfin.inner(dolfin.grad(_theta), dolfin.grad(theta_))*dx+prm.rho*c_p_eff(theta_k)/dt*(dolfin.inner(_theta, theta_) - dolfin.inner(theta_k, theta_))*dx - sum(q_form)
                 problem = dolfin.LinearVariationalProblem(dolfin.lhs(F),dolfin.rhs(F),theta,bc_form)
                 solver = dolfin.LinearVariationalSolver(problem)
+                
                 return solver, theta, theta_k
 
-            def stefan_form_ehc():
+            def stefan_form_ehc(nonlinear=False):
                 # Vrat formulaci pro equivalent heat method
                 
                 # Definuj prostor funkci:
@@ -388,16 +470,29 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                 def c_p_eff(theta):
                     return em.mollify(prm.cp_s,prm.cp_l,theta,x0=prm.theta_m,deg='disC')+em.dirac(prm.cp_m+prm.L_m,theta,x0=prm.theta_m,deg='disC')
 
+                # Nonlinear formulation:
+                if nonlinear:
+                    
+                    F=k_eff(theta)*dolfin.inner(dolfin.grad(theta),dolfin.grad(theta_))*dx+prm.rho*c_p_eff(theta)/dt*(dolfin.inner(theta,theta_)-dolfin.inner(theta_k, theta_))*dx-sum(q_form)
+
+                    problem = dolfin.NonlinearVariationalProblem(F,theta,bcs=bc_form,J=dolfin.derivative(F,theta))
+                    solver = dolfin.NonlinearVariationalSolver(problem)
+
+                    return solver, theta, theta_k    
+
                 F = k_eff(theta_k)*dolfin.inner(dolfin.grad(_theta), dolfin.grad(theta_))*dx+prm.rho*c_p_eff(theta_k)/dt*(dolfin.inner(_theta, theta_) - dolfin.inner(theta_k, theta_))*dx - sum(q_form)
+                
                 problem = dolfin.LinearVariationalProblem(dolfin.lhs(F),dolfin.rhs(F),theta,bc_form)
                 solver = dolfin.LinearVariationalSolver(problem)
+                
                 return solver, theta, theta_k
 
-            def stefan_form_cao():
-                # Vrat formulaci pro temperature transforming model (Cao,1991)
+            def stefan_form_cao(nonlinear=True):
+                # Temperature transforming model (Cao,1991)
                 
                 # Definuj prostor funkci:
-                (T,bcs,theta,_theta,theta_)=stefan_function_spaces(nonlinear=True)
+                (T,bcs,theta,_theta,theta_)=stefan_function_spaces()
+                
                 # Nastav poc. podminku:
                 theta_k=dolfin.project(theta_analytic,T)
 
@@ -415,8 +510,10 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
 
                 # Nonlinear formulation:
                 F=k_eff(theta)*dolfin.inner(dolfin.grad(theta),dolfin.grad(theta_))*dx+prm.rho/dt*(c_p_eff(theta)*(theta-prm.theta_m)+s(theta)-c_p_eff(theta_k)*(theta_k-prm.theta_m)-s(theta_k))*theta_*dx-sum(q_form)
+                
                 problem = dolfin.NonlinearVariationalProblem(F,theta,bcs=bc_form,J=dolfin.derivative(F,theta))
                 solver = dolfin.NonlinearVariationalSolver(problem)
+                
                 return solver, theta, theta_k
             
             methodswitch = {
@@ -433,6 +530,7 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
         # Dictionary sim contains forms for particular methods:
         sim={}
         for method in methods:
+            
             (solver, theta, theta_k)=stefan_problem_form(method)()
             
             sim[method]=(solver,theta,theta_k)
@@ -486,6 +584,7 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
 
             # Solve FEM problem for given methods:
             for method in sim:
+                
                 sim[method][0].solve()
                 sim[method][2].assign(sim[method][1])
 
@@ -532,7 +631,7 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
 
         # Graph position of the melting front:
         if rank==0:
-            splt.graph_front_pos(dat_timeset,lambda_,front_positions, offset=False)
+            splt.graph_front_pos(dat_timeset,lambda_,front_positions)
             splt.graph_front_pos_diff(dat_timeset,lambda_,front_positions)
         #================================================
         
@@ -576,4 +675,8 @@ def stefan_benchmark():
     # find lambda and return analytic solution:
     (lambda_,theta_analytic,q_in,q_out)=stefan_analytic_sol(DIM)()
     # do the computation:
-    stefan_benchmark_sim(mesh,boundary,n,dx,ds,lambda_,theta_analytic,q_in,q_out,['em','ehc','cao'])()
+    stefan_benchmark_sim(mesh,boundary,n,dx,ds,lambda_,theta_analytic,q_in,q_out,['ehc','cao'])()
+
+# Poznamka z 7.6.: bohuzel nelinearni formulace nekonverguje pro Cinf aproximace heavisida a diraca u cp_eff, pokud zvolis C1/Cinf pro HS/D pak to funguje, pro Cinf/Cinf haze nan pro reziduum, prozkoumej co se deje
+
+# Poznamka z 8.6.: problem je v Cinf aproximaci heaviside funkce

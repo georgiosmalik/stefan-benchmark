@@ -11,14 +11,22 @@ import sim.params as prm
 
 def stefan_mesh(dim):
     def stefan_mesh_1d():
+        prm.q_0=5e4
+        
         prm.R1=0
-        prm.meshres=10
+        prm.meshres=100
+        
         return msh.mesh1d(prm.R1,prm.R2,prm.meshres)
+    
     def stefan_mesh_2d():
+        prm.q_0=2000
+        
         prm.R1=0.1
         prm.meshres=20
         return msh.mesh2d(prm.R1,prm.R2,prm.meshres)
     def stefan_mesh_3d():
+        prm.q_0=5
+        
         # The mesh was generated as a spherical shell between R1=0.2 and R2=1
         prm.R1=0.2
         return msh.meshhdf("./pre/gmsh_mesh/sphere")
