@@ -12,9 +12,11 @@ import numpy as np
 
 from ufl import tanh
 
+# Global parameters
 # Mollification constants
-eps = 0.4
-deg = 'Cinf'
+EPS = 0.4
+DEG = 'Cinf'
+C_EPS=1.
 
 #---------------------------------
 # Definition of additional methods
@@ -42,7 +44,7 @@ def sign(x, x0=0.0):
     return dolfin.conditional(x<x0-dolfin.DOLFIN_EPS,-1,dolfin.conditional((x-x0)<dolfin.DOLFIN_EPS,0,1))
 
 # Heaviside step function
-def heaviside(x, x0=0.0, eps=eps, deg=deg):
+def heaviside(x, x0=0.0, eps=EPS, deg=DEG):
     """Approximation of Heaviside function with center at x0 and half-width eps"""
     # Exact formulation
     def hs_exact():
@@ -56,7 +58,9 @@ def heaviside(x, x0=0.0, eps=eps, deg=deg):
                 else:
                     y[pos] = 0
             return y
-        return dolfin.Expression("(abs(x[0])<delta) ? 0.5 : ((x[0]<0) ? 0 : 1)", delta=dolfin.DOLFIN_EPS, degree=1)
+        return dolfin.conditional(abs(x-x0)<dolfin.DOLFIN_EPS,0.5, dolfin.conditional(x>x0, 1, 0))
+        #return dolfin.Expression("(abs(x[0]-x0)<delta) ? 0.5 : ((x[0]-x0<0) ? 0 : 1)", delta=dolfin.DOLFIN_EPS, degree=1)
+    
 
     # Discontinuous approximation
     def hs_disC():
@@ -116,7 +120,7 @@ def heaviside(x, x0=0.0, eps=eps, deg=deg):
     return degswitch.get(deg,"Please enter 'CO','C1','Cinf', or 'exact'.")
 
 # Dirac function
-def df(x, x0=0.0, eps=eps, deg=deg):
+def df(x, x0=0.0, eps=EPS, deg=DEG):
     """Approximation of Dirac delta dist. with center at x0 and half-width eps"""
     # Discontinuous approximation
     def df_disC():
@@ -168,13 +172,20 @@ def df(x, x0=0.0, eps=eps, deg=deg):
         }
     return degswitch.get(deg,"Please enter 'disC','CO','C1',or 'Cinf'.")
 
-def mollify(xminus, xplus, x, x0=0.0, eps=eps, deg=deg):
+def mollify(xminus, xplus, x, x0=0.0, eps=EPS, deg=DEG):
     """Mollify the jump between xminus and xplus values."""
     return xminus*(1-heaviside(x, x0, eps, deg)()) + xplus*heaviside(x, x0, eps, deg)()
 
-def dirac(xvalue, x, x0=0.0, eps=eps, deg=deg):
+def dirac(xvalue, x, x0=0.0, eps=EPS, deg=DEG):
     """Return dirac with L1 norm of xvalue."""
     return xvalue*df(x,x0,eps,deg)()
+
+def set_eps(mesh,theta):
+    h_min=mesh.hmin()
+    theta_norm=dolfin.project(dolfin.sqrt(dolfin.inner(dolfin.grad(theta),dolfin.grad(theta))),theta.function_space())
+    theta_grad_max=theta_norm.vector().norm('linf')
+    global EPS
+    EPS=C_EPS*h_min*theta_grad_max
 # #---------------------------------
 # # Enthalpy method formulation from Cao, 1990:
 # # Source term:

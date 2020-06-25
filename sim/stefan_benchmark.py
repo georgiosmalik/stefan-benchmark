@@ -39,31 +39,44 @@ import sim.params as prm
 import sim.enthalpy_method as em
 import post.my_plot as mplt
 import post.stefan_plot as splt
-import post.misc as misc
 
 from scipy.special import erf, erfc, expi, gamma, gammaincc
 from scipy.optimize import fsolve
 from math import floor, ceil
 
+import time
+
 # IMPORTANT FOR NON-LINEAR FORM----------
-dolfin.parameters['form_compiler']['quadrature_degree']=10
+dolfin.parameters['form_compiler']['quadrature_degree']=8
 # ---------------------------------------
 
 dolfin.set_log_level(30)
 
+#------------------------------------
 # Global parameters of the simulation
+#====================================
 DIM=0
 BOUNDARY_FORMULATION="DN"
 
+# Flag for linear/nonlinear formulation of ehc and em
+NONLINEAR=True
+
+# Degree of finite element spaces:
+DEGREE=1
+
 # Starting and ending radius of simulation
 R_START=0.4
-R_END=0.8
+R_END=0.65
 
 # CFL condition constant
-C_CFL=0.01
+C_CFL=0.1
+
+# Mollification constant
+em.C_EPS=1.
 
 # Number of timesteps, overridden by CFL condition
 TIMESTEPS=1000
+#=====================================
 
 def stefan_analytic_sol(dim, ploteq=False):
     """Return analytic solution of the radially symmetric Stefan problem."""
@@ -370,7 +383,7 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
         
         return sim_timeset, dat_timeset, plot_timeset
 
-    def stefan_function_spaces(degree=2):
+    def stefan_function_spaces(degree=DEGREE):
         # Tohle by melo vracet definice prostoru a funkce
         T_ele = dolfin.FiniteElement("CG", mesh.ufl_cell(), degree)
         T = dolfin.FunctionSpace(mesh, T_ele)
@@ -390,7 +403,7 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
 
     # Metoda na vypocet pozice fronty
     def stefan_front_position(theta):
-        vol_ice=dolfin.assemble(em.mollify(1,0,theta,x0=prm.theta_m,eps=0.4,deg='Cinf')*dx)
+        vol_ice=dolfin.assemble(em.mollify(1,0,theta,x0=prm.theta_m,eps=0.4,deg='exact')*dx)
         def front_pos_1d():
             return (prm.R2-vol_ice)
         def front_pos_2d():
@@ -421,7 +434,7 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                 bc_form=bc[floor(0+i):ceil(1+i)]
                 return q_form, bc_form
                 
-            def stefan_form_em(nonlinear=False):
+            def stefan_form_em(nonlinear=NONLINEAR):
                 # Vrat formulaci pro enthalpy method
                 
                 # Definuj prostor funkci:
@@ -454,7 +467,7 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                 
                 return solver, theta, theta_k
 
-            def stefan_form_ehc(nonlinear=False):
+            def stefan_form_ehc(nonlinear=NONLINEAR):
                 # Vrat formulaci pro equivalent heat method
                 
                 # Definuj prostor funkci:
@@ -473,7 +486,10 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                 # Nonlinear formulation:
                 if nonlinear:
                     
-                    F=k_eff(theta)*dolfin.inner(dolfin.grad(theta),dolfin.grad(theta_))*dx+prm.rho*c_p_eff(theta)/dt*(dolfin.inner(theta,theta_)-dolfin.inner(theta_k, theta_))*dx-sum(q_form)
+                    F=k_eff(theta)*dolfin.inner(dolfin.grad(theta),dolfin.grad(theta_))*dx+prm.rho/dt*(c_p_eff(theta)*dolfin.inner(theta,theta_)-c_p_eff(theta_k)*dolfin.inner(theta_k, theta_))*dx-sum(q_form)
+
+                    # testing subtle linearization:
+                    #F=k_eff(theta)*dolfin.inner(dolfin.grad(theta),dolfin.grad(theta_))*dx+prm.rho/dt*(c_p_eff(theta_k)*dolfin.inner(theta,theta_)-c_p_eff(theta_k)*dolfin.inner(theta_k, theta_))*dx-sum(q_form)
 
                     problem = dolfin.NonlinearVariationalProblem(F,theta,bcs=bc_form,J=dolfin.derivative(F,theta))
                     solver = dolfin.NonlinearVariationalSolver(problem)
@@ -505,14 +521,20 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                     return em.mollify(prm.cp_s,prm.cp_l,theta,x0=prm.theta_m,deg='disC')+em.dirac(prm.cp_m+prm.L_m,theta,x0=prm.theta_m,deg='disC')
 
                 # Cao formulation source term
-                def s(theta, theta0=prm.theta_m, eps=em.eps):
+                def s(theta, theta0=prm.theta_m, eps=em.EPS):
                     return dolfin.conditional(abs(theta-theta0)<eps,prm.cp_m*eps + prm.L_m/2,dolfin.conditional(theta>theta0,prm.cp_s*eps+prm.L_m,prm.cp_s*eps))
 
                 # Nonlinear formulation:
                 F=k_eff(theta)*dolfin.inner(dolfin.grad(theta),dolfin.grad(theta_))*dx+prm.rho/dt*(c_p_eff(theta)*(theta-prm.theta_m)+s(theta)-c_p_eff(theta_k)*(theta_k-prm.theta_m)-s(theta_k))*theta_*dx-sum(q_form)
+
+                # testing subtle linearity
+                F=k_eff(theta)*dolfin.inner(dolfin.grad(theta),dolfin.grad(theta_))*dx+prm.rho/dt*(c_p_eff(theta_k)*(theta-prm.theta_m)+s(theta)-c_p_eff(theta_k)*(theta_k-prm.theta_m)-s(theta_k))*theta_*dx-sum(q_form)
                 
                 problem = dolfin.NonlinearVariationalProblem(F,theta,bcs=bc_form,J=dolfin.derivative(F,theta))
                 solver = dolfin.NonlinearVariationalSolver(problem)
+                solver.parameters['newton_solver']['absolute_tolerance']=1E-5
+                #solver.parameters['newton_solver']['relaxation_parameter']=1.0
+                #solver.parameters['newton_solver']['maximum_iterations']=100
                 
                 return solver, theta, theta_k
             
@@ -522,7 +544,7 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                 'cao':stefan_form_cao
             }
             return methodswitch.get(method,method+" is not implemented. Consider 'em', 'ehc', or 'cao'.")
-        
+
         # Nastaveni casoveho schematu, plus startovniho casu pro analyt. res.
         sim_timeset, dat_timeset, plot_timeset=stefan_loop_timesets()
         theta_analytic.t=sim_timeset[0]
@@ -544,7 +566,7 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
             T=sim[methods[0]][1].function_space()
         else:
             T=stefan_function_spaces()[0]
-
+            
         #-------------------------------------
         # Data files:
 
@@ -575,17 +597,30 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                 front_positions[method]=[]
             front_pos_file.write('\n')
         #--------------------------------------
+        # Set epsilon (mollifying parameter)
+        em.set_eps(mesh,dolfin.project(theta_analytic,T))
 
+        print('dt='+str(dt)+', eps='+str(em.EPS)+', nx='+str(prm.meshres)+', lambda='+str(lambda_)+', q_0='+str(prm.q_0))
+        
+        index=0
+        #t0=time.time()
         # Time loop: 
         for t in np.nditer(sim_timeset):
-
+            index=index+1
             # Update the analytical solution, form and boundary conditions:
             stefan_form_update(t)
 
             # Solve FEM problem for given methods:
             for method in sim:
                 
+                # Testing newton solver:
+                sim[method][1].assign(dolfin.project(theta_analytic,T))
+                
                 sim[method][0].solve()
+                # if index==100:
+                #     t1=time.time()
+                #     print(t1-t0)
+                #     exit()
                 sim[method][2].assign(sim[method][1])
 
             # Data saving:
@@ -602,10 +637,10 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
 
                 #----------------------
                 # Front pos testing:
-                front_pos_proj=dolfin.project(em.mollify(1,0,theta_analytic_proj,x0=prm.theta_m,eps=0.01,deg='disC'),T)
-                front_pos_proj.rename("Front position analytic","front_pos_analytic")
+                # front_pos_proj=dolfin.project(em.mollify(1,0,theta_analytic_proj,x0=prm.theta_m,eps=0.01,deg='disC'),T)
+                # front_pos_proj.rename("Front position analytic","front_pos_analytic")
 
-                data_xdmf.write(front_pos_proj,t=t)
+                # data_xdmf.write(front_pos_proj,t=t)
                 #=======================
                 
                 # Uloz teplotni pole do datovych souboru:
@@ -615,54 +650,101 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                 
                     # Front position calculation and export:
                     front_position=stefan_front_position(sim[method][1])()
+                    # if t in dat_timeset[3:]:
+                    #     print(abs(front_position-2*lambda_*np.sqrt(t)))
+                    #     p=dolfin.Point(front_position)
+                    #     print(sim[method][1](p),theta_analytic(p))
+                    #     temp2=dolfin.project(em.mollify(272,285,theta,x0=prm.theta_m,eps=0.4,deg='exact'),sim[method][1].function_space())
+                    #     dolfin.plot(sim[method][1])
+                    #     dolfin.plot(theta_analytic, mesh=mesh)
+                    #     dolfin.plot(temp2)
+                    #     plt.show()
+                    #     exit()
                     if rank==0:
                         front_positions[method].append(front_position)
 
                         # Zapis hodnoty do dat souboru:
-                        front_pos_file.write('%.10f %.10f ' % (t,front_positions[method][-1]))
-                if rank==0:
-                    front_pos_file.write('\n')
+                        #front_pos_file.write('%.10f %.10f ' % (t,front_positions[method][-1]))
+                # if rank==0:
+                #     front_pos_file.write('\n')
 
         #-----------------------------------------------
         # Postprocessing:
         # Graph temp distribution along ray from origin:
-        splt.DIM=DIM
-        splt.graph_temp(dat_timeset,plot_timeset,theta_analytic,sim,data_hdf,comm,rank,bbox)
+        #splt.DIM=DIM
+        #splt.graph_temp(dat_timeset,plot_timeset,theta_analytic,sim,data_hdf,comm,rank,bbox)
 
         # Graph position of the melting front:
-        if rank==0:
-            splt.graph_front_pos(dat_timeset,lambda_,front_positions)
-            splt.graph_front_pos_diff(dat_timeset,lambda_,front_positions)
+        # if rank==0:
+        #     splt.graph_front_pos(dat_timeset,lambda_,front_positions)
+            # splt.graph_front_pos_diff(dat_timeset,lambda_,front_positions)
         #================================================
         
         # Vypisovani norem rozdilu do csv souboru:
+
+        # Projekce presneho reseni:
+        # if sim:
+        #     theta_analytic_proj=dolfin.project(theta_analytic,sim[method][1].function_space())
+        #     errmethod={}
+        #     for method in sim:
+        #         errmethod[method]=(dolfin.errornorm(theta_analytic_proj,sim[method][1],norm_type='L2')/dolfin.norm(theta_analytic_proj),
+        #                            dolfin.norm(theta_analytic_proj.vector()-sim[method][1].vector(),'linf')/dolfin.norm(theta_analytic_proj.vector(),'linf'))
+        
+        #     # Zkontroluj vliv project/interpolation!!!
+        
+        #     # Vytvorime csv soubor na zapisovani:
+        #     if rank==0:
+        #         with open('./out/data/'+str(DIM)+'d/error_norms.csv', 'w') as csvfile:
+        #             filewriter = csv.writer(csvfile, delimiter=',',
+        #                                     quotechar='|',
+        #                                     quoting=csv.QUOTE_MINIMAL)
+        #             # Zapisujeme typ metody, L2 a L inf normu rel chyby
+        #             filewriter.writerow(['method', 'l2norm', 'linfnorm'])
+        #             for method in sim:
+        #                 filewriter.writerow([method,
+        #                                      str(errmethod[method][0]),
+        #                                      str(errmethod[method][1])])
+        #                 # Na posledni radek zapiseme parametry diskretizace
+        #                 filewriter.writerow(['$\epsilon='+str(em.eps)+'$',
+        #                                      '$nx='+str(prm.meshres)+'$',
+        #                                      '$dt='+str(dt)+'$'] )
+        # konec sekce pro vypisovani chyb do csv filu
+        #==========================================================
+
+        #================================================
+        
+        # Vypisovani dat pro konvergencni tabulku:
 
         # Projekce presneho reseni:
         if sim:
             theta_analytic_proj=dolfin.project(theta_analytic,sim[method][1].function_space())
             errmethod={}
             for method in sim:
-                errmethod[method]=(dolfin.errornorm(theta_analytic_proj,sim[method][1],norm_type='L2')/dolfin.norm(theta_analytic_proj),
-                                   dolfin.norm(theta_analytic_proj.vector()-sim[method][1].vector(),'linf')/dolfin.norm(theta_analytic_proj.vector(),'linf'))
+                errmethod[method]=[dolfin.errornorm(theta_analytic_proj,sim[method][1],norm_type='L2')/dolfin.norm(theta_analytic_proj),
+                                   dolfin.norm(theta_analytic_proj.vector()-sim[method][1].vector(),'linf')/dolfin.norm(theta_analytic_proj.vector(),'linf'),
+                                   abs(front_positions[method][-1]-2*lambda_*np.sqrt(dat_timeset[-1]))/2*lambda_*np.sqrt(dat_timeset[-1])
+                ]
         
             # Zkontroluj vliv project/interpolation!!!
         
             # Vytvorime csv soubor na zapisovani:
             if rank==0:
-                with open('./out/data/'+str(DIM)+'d/error_norms.csv', 'w') as csvfile:
+                with open('./out/data/'+str(DIM)+'d/convergence.csv', 'a') as csvfile:
+
                     filewriter = csv.writer(csvfile, delimiter=',',
                                             quotechar='|',
-                                            quoting=csv.QUOTE_MINIMAL)
-                    # Zapisujeme typ metody, L2 a L inf normu rel chyby
-                    filewriter.writerow(['method', 'l2norm', 'linfnorm'])
+                                            quoting=csv.QUOTE_MINIMAL
+                    )
+                    
+                    params='\# cells='+str(mesh.num_cells())+' (h='+'{0:.3f}'.format(mesh.hmax())+') dt='+'{0:>2.3e}'.format(dt)
                     for method in sim:
-                        filewriter.writerow([method,
-                                             str(errmethod[method][0]),
-                                             str(errmethod[method][1])])
-                        # Na posledni radek zapiseme parametry diskretizace
-                        filewriter.writerow(['$\epsilon='+str(em.eps)+'$',
-                                             '$nx='+str(prm.meshres)+'$',
-                                             '$dt='+str(dt)+'$'] )
+                        filewriter.writerow([params,
+                                             method,
+                                             '{0:>2.3e}'.format(errmethod[method][0]),
+                                             '{0:>2.3e}'.format(errmethod[method][1]),
+                                             '{0:>2.3e}'.format(errmethod[method][2])
+                        ])
+                        params=''
         # konec sekce pro vypisovani chyb do csv filu
         #==========================================================
                 
@@ -675,7 +757,7 @@ def stefan_benchmark():
     # find lambda and return analytic solution:
     (lambda_,theta_analytic,q_in,q_out)=stefan_analytic_sol(DIM)()
     # do the computation:
-    stefan_benchmark_sim(mesh,boundary,n,dx,ds,lambda_,theta_analytic,q_in,q_out,['ehc','cao'])()
+    stefan_benchmark_sim(mesh,boundary,n,dx,ds,lambda_,theta_analytic,q_in,q_out,['ehc'])()
 
 # Poznamka z 7.6.: bohuzel nelinearni formulace nekonverguje pro Cinf aproximace heavisida a diraca u cp_eff, pokud zvolis C1/Cinf pro HS/D pak to funguje, pro Cinf/Cinf haze nan pro reziduum, prozkoumej co se deje
 

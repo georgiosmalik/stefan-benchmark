@@ -1,0 +1,9 @@
+// This file generates mesh in .msh file format from a given .geo file
+Include "sphere.geo";
+Mesh.Algorithm = 6;
+Mesh.Optimize=1;
+//Mesh.Format=1;
+Mesh 3;
+
+Save Sprintf("sphere.msh");
+

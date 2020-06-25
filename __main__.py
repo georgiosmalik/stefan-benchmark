@@ -17,7 +17,8 @@ import sim.stefan_benchmark
 from pathlib import Path
 
 # Toto nastavi cwd na cestu z ktere se pak mohu odkazovat relativne na dalsi slozky:
-os.chdir(os.path.dirname(__file__))
+if os.path.dirname(__file__):
+    os.chdir(os.path.dirname(__file__))
 
 if __name__ == "__main__":
     dim=int(sys.argv[1][0])
@@ -25,6 +26,14 @@ if __name__ == "__main__":
     # Creates directories for output:
     Path("./out/data/"+str(dim)+"d").mkdir(parents=True,exist_ok=True)
     Path("./out/fig/"+str(dim)+"d").mkdir(parents=True,exist_ok=True)
+
+    # Pokyny k pousteni:
+    # pustit prikazem python3 stefan-benchmark 1d z nadrazene slozky
+    # kod je pomerne slozity, porad se jedna o pracovni verzi, tedy odpust prosim ten neporadek
+    # nize se nastavuji konstanty ktere ovlivnuji vypocet (prvni souvisi s casovym krokem, druhe s sirkou mushy regionu, treti s prostorovou diskretizace, ta treti ted koresponduje s 1d variantou, zbyle jsou univerzalni)
+    sim.stefan_benchmark.C_CFL=0.1
+    sim.stefan_benchmark.em.C_EPS=.01
+    sim.stefan_benchmark.prm.meshres=1000
 
     # Run simulation:
     sim.stefan_benchmark.DIM=dim
