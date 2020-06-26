@@ -28,6 +28,11 @@
 # Ukoly navic:
 # 1. Zjistit proc nefunguje tvoje formulace LS.
 
+# Chyby:
+# zkontroluj c_p_eff, c_pm uz je obsazeno v mollify
+# formulace ehc je spatne, nederivujes cp, ale jen teplotu
+# DD formulace, spatne okrajovky
+
 
 import dolfin
 import numpy as np
@@ -76,6 +81,16 @@ em.C_EPS=1.
 
 # Number of timesteps, overridden by CFL condition
 TIMESTEPS=1000
+
+# Nonlinear solver parameters
+NEWTON_PARAMS=dolfin.Parameters("newton_solver")
+NEWTON_PARAMS.add("absolute_tolerance",1e-5)
+NEWTON_PARAMS.add("maximum_iterations",25)
+#NONLINEAR_SOLVER_PARAMS={"newton_solver":{"absolute_tolerance":1e-5,
+                                          #"relaxation_parameter":1.0,
+                                          #"maximum_iterations":100,
+                                          #},
+                         #}
 #=====================================
 
 def stefan_analytic_sol(dim, ploteq=False):
@@ -120,7 +135,7 @@ def stefan_analytic_sol(dim, ploteq=False):
         #q_in=dolfin.Expression(code_flux, t=0.1, k=prm.k_l, C1=(prm.theta_m-prm.theta_0)/(erf(lambda_/np.sqrt(prm.kappa_l))*np.sqrt(np.pi*prm.kappa_l)), r=prm.R1, kappa=prm.kappa_l, degree=0)
 
         # podle clanku:
-        q_in=dolfin.Expression(code_flux, t=0.1, k=prm.k_l, C1=prm.q_0/prm.k_l, r=prm.R1, kappa=prm.kappa_l, degree=0)
+        q_in=dolfin.Expression(code_flux, t=0.1, k=prm.k_l, C1=-prm.q_0/prm.k_l, r=prm.R1, kappa=prm.kappa_l, degree=0)
 
         # Heat outflux:
         q_out=dolfin.Expression(code_flux, t=0.1, k=prm.k_s, C1=(prm.theta_m-prm.theta_inf)/(erfc(lambda_/np.sqrt(prm.kappa_s))*np.sqrt(np.pi*prm.kappa_s)), r=prm.R2, kappa=prm.kappa_s, degree=0)
@@ -403,7 +418,7 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
 
     # Metoda na vypocet pozice fronty
     def stefan_front_position(theta):
-        vol_ice=dolfin.assemble(em.mollify(1,0,theta,x0=prm.theta_m,eps=0.4,deg='exact')*dx)
+        vol_ice=dolfin.assemble(em.mollify(1,0,theta,x0=prm.theta_m,eps=dolfin.DOLFIN_EPS,deg='disC')*dx)
         def front_pos_1d():
             return (prm.R2-vol_ice)
         def front_pos_2d():
@@ -427,12 +442,19 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
 
             def stefan_boundary_values(theta_tr,bc):
                 # Vrat okrajove cleny v zavislosti na formulaci
-                
-                formulation={"DN":0,"ND":1,"NN":2,"DD":1.5}
+                formulation={"DN":0,"ND":1,"NN":2,"DD":0.5}
                 i=formulation[BOUNDARY_FORMULATION]
                 q_form = [q_out*theta_tr*ds(2),q_in*theta_tr*ds(1)][floor(-1.5+i):ceil(0.5+i)]
                 bc_form=bc[floor(0+i):ceil(1+i)]
+
                 return q_form, bc_form
+
+            # Define mollyfied parameters:
+            def k_eff(theta,deg=em.DEG):
+                return em.mollify(prm.k_s,prm.k_l,theta,x0=prm.theta_m,deg=deg)
+
+            def c_p_eff(theta,deg=em.DEG):
+                    return em.mollify(prm.cp_s,prm.cp_l,theta,x0=prm.theta_m,deg=deg)+em.dirac(prm.L_m,theta,x0=prm.theta_m,deg=deg)
                 
             def stefan_form_em(nonlinear=NONLINEAR):
                 # Vrat formulaci pro enthalpy method
@@ -444,19 +466,15 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                 theta_k=dolfin.project(theta_analytic,T)
 
                 q_form, bc_form=stefan_boundary_values(theta_,bcs)
-                
-                def k_eff(theta):
-                    return em.mollify(prm.k_s,prm.k_l,theta,x0=prm.theta_m,deg='C0')
-                def c_p_eff(theta):
-                    return em.mollify(prm.cp_s,prm.cp_l,theta,x0=prm.theta_m,deg='C1')+em.dirac(prm.cp_m+prm.L_m,theta,x0=prm.theta_m,deg='C1')
 
                 # Nonlinear formulation:
                 if nonlinear:
                     
-                    F=k_eff(theta)*dolfin.inner(dolfin.grad(theta),dolfin.grad(theta_))*dx+prm.rho*c_p_eff(theta)/dt*(dolfin.inner(theta,theta_)-dolfin.inner(theta_k,theta_))*dx-sum(q_form)
+                    F = k_eff(theta,deg='Cinf')*dolfin.inner(dolfin.grad(theta),dolfin.grad(theta_))*dx+prm.rho/dt*c_p_eff(theta,deg='Cinf')*(dolfin.inner(theta,theta_)-dolfin.inner(theta_k, theta_))*dx-sum(q_form)
 
                     problem = dolfin.NonlinearVariationalProblem(F,theta,bcs=bc_form,J=dolfin.derivative(F,theta))
                     solver = dolfin.NonlinearVariationalSolver(problem)
+                    solver.parameters["newton_solver"]=NEWTON_PARAMS
 
                     return solver, theta, theta_k
                     
@@ -477,26 +495,19 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                 theta_k=dolfin.project(theta_analytic,T)
 
                 q_form, bc_form=stefan_boundary_values(theta_,bcs)
-            
-                def k_eff(theta):
-                    return em.mollify(prm.k_s,prm.k_l,theta,x0=prm.theta_m,deg='C0')
-                def c_p_eff(theta):
-                    return em.mollify(prm.cp_s,prm.cp_l,theta,x0=prm.theta_m,deg='disC')+em.dirac(prm.cp_m+prm.L_m,theta,x0=prm.theta_m,deg='disC')
 
                 # Nonlinear formulation:
                 if nonlinear:
                     
-                    F=k_eff(theta)*dolfin.inner(dolfin.grad(theta),dolfin.grad(theta_))*dx+prm.rho/dt*(c_p_eff(theta)*dolfin.inner(theta,theta_)-c_p_eff(theta_k)*dolfin.inner(theta_k, theta_))*dx-sum(q_form)
-
-                    # testing subtle linearization:
-                    #F=k_eff(theta)*dolfin.inner(dolfin.grad(theta),dolfin.grad(theta_))*dx+prm.rho/dt*(c_p_eff(theta_k)*dolfin.inner(theta,theta_)-c_p_eff(theta_k)*dolfin.inner(theta_k, theta_))*dx-sum(q_form)
+                    F = k_eff(theta,deg='C0')*dolfin.inner(dolfin.grad(theta),dolfin.grad(theta_))*dx+prm.rho/dt*c_p_eff(0.5*(theta+theta_k),deg='C0')*(dolfin.inner(theta,theta_)-dolfin.inner(theta_k, theta_))*dx-sum(q_form)
 
                     problem = dolfin.NonlinearVariationalProblem(F,theta,bcs=bc_form,J=dolfin.derivative(F,theta))
                     solver = dolfin.NonlinearVariationalSolver(problem)
+                    solver.parameters["newton_solver"]=NEWTON_PARAMS
 
                     return solver, theta, theta_k    
 
-                F = k_eff(theta_k)*dolfin.inner(dolfin.grad(_theta), dolfin.grad(theta_))*dx+prm.rho*c_p_eff(theta_k)/dt*(dolfin.inner(_theta, theta_) - dolfin.inner(theta_k, theta_))*dx - sum(q_form)
+                F = k_eff(theta_k,deg='C0')*dolfin.inner(dolfin.grad(_theta), dolfin.grad(theta_))*dx+prm.rho*c_p_eff(theta_k,deg='disC')/dt*(dolfin.inner(_theta, theta_) - dolfin.inner(theta_k, theta_))*dx - sum(q_form)
                 
                 problem = dolfin.LinearVariationalProblem(dolfin.lhs(F),dolfin.rhs(F),theta,bc_form)
                 solver = dolfin.LinearVariationalSolver(problem)
@@ -514,27 +525,17 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
 
                 # Nastav okrajove cleny:
                 q_form, bc_form=stefan_boundary_values(theta_,bcs)
-            
-                def k_eff(theta):
-                    return em.mollify(prm.k_s,prm.k_l,theta,x0=prm.theta_m,deg='C0')
-                def c_p_eff(theta):
-                    return em.mollify(prm.cp_s,prm.cp_l,theta,x0=prm.theta_m,deg='disC')+em.dirac(prm.cp_m+prm.L_m,theta,x0=prm.theta_m,deg='disC')
 
                 # Cao formulation source term
                 def s(theta, theta0=prm.theta_m, eps=em.EPS):
                     return dolfin.conditional(abs(theta-theta0)<eps,prm.cp_m*eps + prm.L_m/2,dolfin.conditional(theta>theta0,prm.cp_s*eps+prm.L_m,prm.cp_s*eps))
 
                 # Nonlinear formulation:
-                F=k_eff(theta)*dolfin.inner(dolfin.grad(theta),dolfin.grad(theta_))*dx+prm.rho/dt*(c_p_eff(theta)*(theta-prm.theta_m)+s(theta)-c_p_eff(theta_k)*(theta_k-prm.theta_m)-s(theta_k))*theta_*dx-sum(q_form)
-
-                # testing subtle linearity
-                F=k_eff(theta)*dolfin.inner(dolfin.grad(theta),dolfin.grad(theta_))*dx+prm.rho/dt*(c_p_eff(theta_k)*(theta-prm.theta_m)+s(theta)-c_p_eff(theta_k)*(theta_k-prm.theta_m)-s(theta_k))*theta_*dx-sum(q_form)
+                F=k_eff(theta,deg='C0')*dolfin.inner(dolfin.grad(theta),dolfin.grad(theta_))*dx+prm.rho/dt*(c_p_eff(theta,deg='disC')*(theta-prm.theta_m)+s(theta)-c_p_eff(theta_k,deg='disC')*(theta_k-prm.theta_m)-s(theta_k))*theta_*dx-sum(q_form)
                 
                 problem = dolfin.NonlinearVariationalProblem(F,theta,bcs=bc_form,J=dolfin.derivative(F,theta))
                 solver = dolfin.NonlinearVariationalSolver(problem)
-                solver.parameters['newton_solver']['absolute_tolerance']=1E-5
-                #solver.parameters['newton_solver']['relaxation_parameter']=1.0
-                #solver.parameters['newton_solver']['maximum_iterations']=100
+                solver.parameters["newton_solver"]=NEWTON_PARAMS
                 
                 return solver, theta, theta_k
             
@@ -614,7 +615,7 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
             for method in sim:
                 
                 # Testing newton solver:
-                sim[method][1].assign(dolfin.project(theta_analytic,T))
+                #sim[method][1].assign(dolfin.project(theta_analytic,T))
                 
                 sim[method][0].solve()
                 # if index==100:
@@ -671,13 +672,13 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
         #-----------------------------------------------
         # Postprocessing:
         # Graph temp distribution along ray from origin:
-        #splt.DIM=DIM
-        #splt.graph_temp(dat_timeset,plot_timeset,theta_analytic,sim,data_hdf,comm,rank,bbox)
+        splt.DIM=DIM
+        splt.graph_temp(dat_timeset,plot_timeset,theta_analytic,sim,data_hdf,comm,rank,bbox)
 
         # Graph position of the melting front:
-        # if rank==0:
-        #     splt.graph_front_pos(dat_timeset,lambda_,front_positions)
-            # splt.graph_front_pos_diff(dat_timeset,lambda_,front_positions)
+        if rank==0:
+            splt.graph_front_pos(dat_timeset,lambda_,front_positions)
+            splt.graph_front_pos_diff(dat_timeset,lambda_,front_positions)
         #================================================
         
         # Vypisovani norem rozdilu do csv souboru:
@@ -757,7 +758,7 @@ def stefan_benchmark():
     # find lambda and return analytic solution:
     (lambda_,theta_analytic,q_in,q_out)=stefan_analytic_sol(DIM)()
     # do the computation:
-    stefan_benchmark_sim(mesh,boundary,n,dx,ds,lambda_,theta_analytic,q_in,q_out,['ehc'])()
+    stefan_benchmark_sim(mesh,boundary,n,dx,ds,lambda_,theta_analytic,q_in,q_out,['cao','ehc'])()
 
 # Poznamka z 7.6.: bohuzel nelinearni formulace nekonverguje pro Cinf aproximace heavisida a diraca u cp_eff, pokud zvolis C1/Cinf pro HS/D pak to funguje, pro Cinf/Cinf haze nan pro reziduum, prozkoumej co se deje
 

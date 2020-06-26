@@ -45,22 +45,7 @@ def sign(x, x0=0.0):
 
 # Heaviside step function
 def heaviside(x, x0=0.0, eps=EPS, deg=DEG):
-    """Approximation of Heaviside function with center at x0 and half-width eps"""
-    # Exact formulation
-    def hs_exact():
-        if type(x) == np.ndarray:
-            y = 0.0*x
-            for pos, val in enumerate(x):
-                if abs(val - x0) < dolfin.DOLFIN_EPS:
-                    y[pos] = 0.5
-                elif val > x0:
-                    y[pos] = 1
-                else:
-                    y[pos] = 0
-            return y
-        return dolfin.conditional(abs(x-x0)<dolfin.DOLFIN_EPS,0.5, dolfin.conditional(x>x0, 1, 0))
-        #return dolfin.Expression("(abs(x[0]-x0)<delta) ? 0.5 : ((x[0]-x0<0) ? 0 : 1)", delta=dolfin.DOLFIN_EPS, degree=1)
-    
+    """Approximation of Heaviside function with center at x0 and half-width eps"""    
 
     # Discontinuous approximation
     def hs_disC():
@@ -111,7 +96,6 @@ def heaviside(x, x0=0.0, eps=EPS, deg=DEG):
         return 0.5*tanh(2.5*(x-x0)/eps) + 0.5
         
     degswitch = {
-        'exact': hs_exact,
         'disC':hs_disC,
         'C0':hs_C0,
         'C1':hs_C1,
