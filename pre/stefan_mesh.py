@@ -13,6 +13,7 @@ import sim.params as prm
 
 def stefan_mesh(dim):
     def stefan_mesh_1d():
+        
         prm.q_0=2e5
         
         prm.R1=0
@@ -22,10 +23,10 @@ def stefan_mesh(dim):
     
     def stefan_mesh_2d():
         
-        prm.q_0=2000
+        prm.q_0=200
         
         prm.R1=0.1
-        prm.meshres=20
+        #prm.meshres=20
         
         return msh.mesh2d(prm.R1,prm.R2,prm.meshres)
     

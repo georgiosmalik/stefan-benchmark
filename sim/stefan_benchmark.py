@@ -71,13 +71,15 @@ DEGREE=1
 
 # Starting and ending radius of simulation
 R_START=0.4
+splt.R_START=R_START
 R_END=0.65
+splt.R_END=R_END
 
 # CFL condition constant
 C_CFL=0.1
 
 # Mollification constant
-em.C_EPS=1.
+em.C_EPS=.1
 
 # Number of timesteps, overridden by CFL condition
 TIMESTEPS=1000
@@ -86,11 +88,13 @@ TIMESTEPS=1000
 NEWTON_PARAMS=dolfin.Parameters("newton_solver")
 NEWTON_PARAMS.add("absolute_tolerance",1e-5)
 NEWTON_PARAMS.add("maximum_iterations",25)
-#NONLINEAR_SOLVER_PARAMS={"newton_solver":{"absolute_tolerance":1e-5,
-                                          #"relaxation_parameter":1.0,
-                                          #"maximum_iterations":100,
-                                          #},
-                         #}
+
+# Specify data output
+GRAPH_TEMP_DIST=True
+GRAPH_FRONT_POS=True
+GRAPH_FRONT_VEL=True
+CONVERGENCE=False
+SAVE_DAT=True
 #=====================================
 
 def stefan_analytic_sol(dim, ploteq=False):
@@ -435,7 +439,7 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
         return switch.get(DIM)
     
     def stefan_loop():
-        # Mel by vratit formulaci v zavislosti na okrajovych podminkach a pouzite metode (equiv heat capacity, cao - temp trans enthalpy method, nase metoda)
+        # Mel by vratit formulaci v zavislosti na okrajovych podminkach a pouzite metode (equiv heat capacity, TTM - temp trans enthalpy method, nase metoda)
         
         def stefan_problem_form(method):
             # Specifikuje metodu, kterou se bude uloha pocitat
@@ -449,7 +453,7 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
 
                 return q_form, bc_form
 
-            # Define mollyfied parameters:
+            # Define mollified parameters:
             def k_eff(theta,deg=em.DEG):
                 return em.mollify(prm.k_s,prm.k_l,theta,x0=prm.theta_m,deg=deg)
 
@@ -499,7 +503,7 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                 # Nonlinear formulation:
                 if nonlinear:
                     
-                    F = k_eff(theta,deg='C0')*dolfin.inner(dolfin.grad(theta),dolfin.grad(theta_))*dx+prm.rho/dt*c_p_eff(0.5*(theta+theta_k),deg='C0')*(dolfin.inner(theta,theta_)-dolfin.inner(theta_k, theta_))*dx-sum(q_form)
+                    F = k_eff(theta,deg='C0')*dolfin.inner(dolfin.grad(theta),dolfin.grad(theta_))*dx+prm.rho/dt*0.5*(c_p_eff(theta,deg='C0')+c_p_eff(theta_k,deg='C0'))*(dolfin.inner(theta,theta_)-dolfin.inner(theta_k, theta_))*dx-sum(q_form)
 
                     problem = dolfin.NonlinearVariationalProblem(F,theta,bcs=bc_form,J=dolfin.derivative(F,theta))
                     solver = dolfin.NonlinearVariationalSolver(problem)
@@ -540,11 +544,11 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                 return solver, theta, theta_k
             
             methodswitch = {
-                'em':stefan_form_em,
-                'ehc':stefan_form_ehc,
-                'cao':stefan_form_cao
+                'EHCreg':stefan_form_em,
+                'EHC':stefan_form_ehc,
+                'TTM':stefan_form_cao
             }
-            return methodswitch.get(method,method+" is not implemented. Consider 'em', 'ehc', or 'cao'.")
+            return methodswitch.get(method,method+" is not implemented. Consider 'EHCreg', 'EHC', or 'TTM'.")
 
         # Nastaveni casoveho schematu, plus startovniho casu pro analyt. res.
         sim_timeset, dat_timeset, plot_timeset=stefan_loop_timesets()
@@ -572,60 +576,76 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
         # Data files:
 
         # I. Simulation results:
-        
-        # Create HDF5 for data storing:
-        data_hdf=dolfin.HDF5File(mesh.mpi_comm(),'./out/data/'+str(DIM)+'d/data.h5',"w")
 
-        # Create XDMF file for ParaView visualization:
-        data_xdmf=dolfin.XDMFFile(mesh.mpi_comm(),'./out/data/'+str(DIM)+'d/data_viz.xdmf')
+        if SAVE_DAT:
+            # Create HDF5 for data storing:
+            data_hdf=dolfin.HDF5File(mesh.mpi_comm(),'./out/data/'+str(DIM)+'d/data.h5',"w")
 
-        # Static mesh setting, lowers file size:
-        data_xdmf.parameters['rewrite_function_mesh']=False
+            # Create XDMF file for ParaView visualization:
+            data_xdmf=dolfin.XDMFFile(mesh.mpi_comm(),'./out/data/'+str(DIM)+'d/data_viz.xdmf')
+
+            # Static mesh setting, lowers file size:
+            data_xdmf.parameters['rewrite_function_mesh']=False
         
-        # Common mesh for all stored functions, lowers file size:
-        data_xdmf.parameters['functions_share_mesh']=True
+            # Common mesh for all stored functions, lowers file size:
+            data_xdmf.parameters['functions_share_mesh']=True
         
         # II. Melting front position:
 
         # Dict front_positions contains melting front positions:
         front_positions={}
         
-        if rank==0:
-            front_pos_file=open('out/data/'+str(DIM)+'d/front_pos','w+')
-
-            for method in sim:
-                front_pos_file.write('t, '+method+', ')
-                front_positions[method]=[]
-            front_pos_file.write('\n')
+        for method in sim:
+            front_positions[method]=[]
         #--------------------------------------
         # Set epsilon (mollifying parameter)
         em.set_eps(mesh,dolfin.project(theta_analytic,T))
 
-        print('dt='+str(dt)+', eps='+str(em.EPS)+', nx='+str(prm.meshres)+', lambda='+str(lambda_)+', q_0='+str(prm.q_0))
+        print('dt='+str(dt)+', eps='+str(em.EPS)+', h_min='+str(mesh.hmin())+', lambda='+str(lambda_)+', q_0='+str(prm.q_0))
+
+        # index=0
         
-        index=0
-        #t0=time.time()
         # Time loop: 
         for t in np.nditer(sim_timeset):
-            index=index+1
-            # Update the analytical solution, form and boundary conditions:
+            # Update to actual time level:
             stefan_form_update(t)
+
+            # if index%10==0:
+            #     fig, ax = plt.subplots(1,1)
 
             # Solve FEM problem for given methods:
             for method in sim:
                 
-                # Testing newton solver:
-                #sim[method][1].assign(dolfin.project(theta_analytic,T))
-                
                 sim[method][0].solve()
-                # if index==100:
-                #     t1=time.time()
-                #     print(t1-t0)
-                #     exit()
                 sim[method][2].assign(sim[method][1])
 
+                # Front position calculation and export:
+                front_position=stefan_front_position(sim[method][1])()
+                if rank==0:
+                        front_positions[method].append(front_position)
+
+            # -----------------------------
+            # Graph shape of the melt front
+            #     if index%10==0:
+            #         dolfin.plot(sim[method][1])
+
+            # if index<=50 and index%10==0:
+            #     print(index)
+            #     theta_analytic_proj=dolfin.project(theta_analytic,T)
+            #     dolfin.plot(theta_analytic_proj)
+            #     ax.set_ylim(272.75, 273.5)
+            #     ax.set_xlim(2*lambda_*np.sqrt(t)-0.005,2*lambda_*np.sqrt(t)+0.005)
+            #     plt.show()
+
+
+            # index=index+1
+
+            # if index==51:
+            #     exit()
+            #=================================
+
             # Data saving:
-            if t in dat_timeset:
+            if SAVE_DAT and (t in dat_timeset):
 
                 # Save projection of analytic solution:
                 theta_analytic_proj=dolfin.project(theta_analytic,T)
@@ -635,22 +655,12 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
 
                 # t=t as a third argument is necessary due to pybind11 bug:
                 data_xdmf.write(theta_analytic_proj,t=t)
-
-                #----------------------
-                # Front pos testing:
-                # front_pos_proj=dolfin.project(em.mollify(1,0,theta_analytic_proj,x0=prm.theta_m,eps=0.01,deg='disC'),T)
-                # front_pos_proj.rename("Front position analytic","front_pos_analytic")
-
-                # data_xdmf.write(front_pos_proj,t=t)
-                #=======================
                 
                 # Uloz teplotni pole do datovych souboru:
                 for method in sim:
                     data_hdf.write(sim[method][1],"theta_"+method,t)
                     data_xdmf.write(sim[method][1],t=t)
                 
-                    # Front position calculation and export:
-                    front_position=stefan_front_position(sim[method][1])()
                     # if t in dat_timeset[3:]:
                     #     print(abs(front_position-2*lambda_*np.sqrt(t)))
                     #     p=dolfin.Point(front_position)
@@ -661,63 +671,26 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                     #     dolfin.plot(temp2)
                     #     plt.show()
                     #     exit()
-                    if rank==0:
-                        front_positions[method].append(front_position)
 
-                        # Zapis hodnoty do dat souboru:
-                        #front_pos_file.write('%.10f %.10f ' % (t,front_positions[method][-1]))
-                # if rank==0:
-                #     front_pos_file.write('\n')
+        #----------------------
+        # Visual postprocessing
+        #======================
 
-        #-----------------------------------------------
-        # Postprocessing:
-        # Graph temp distribution along ray from origin:
-        splt.DIM=DIM
-        splt.graph_temp(dat_timeset,plot_timeset,theta_analytic,sim,data_hdf,comm,rank,bbox)
+        # 1d graphs:
+        if GRAPH_TEMP_DIST and rank==0:
+            # Graph temp distribution along ray from origin:
+            splt.graph_temp(dat_timeset,plot_timeset,theta_analytic,sim,data_hdf,comm,rank,bbox)
 
-        # Graph position of the melting front:
-        if rank==0:
-            splt.graph_front_pos(dat_timeset,lambda_,front_positions)
-            splt.graph_front_pos_diff(dat_timeset,lambda_,front_positions)
-        #================================================
+        if GRAPH_FRONT_POS and rank==0:
+            # Graph position of the melting front:
+            splt.graph_front_pos(sim_timeset,lambda_,front_positions)
+            splt.graph_front_pos_diff(sim_timeset,lambda_,front_positions)
+
+        if GRAPH_FRONT_VEL and rank==0:
+            splt.graph_front_vel(sim_timeset,lambda_,front_positions)
         
-        # Vypisovani norem rozdilu do csv souboru:
-
-        # Projekce presneho reseni:
-        # if sim:
-        #     theta_analytic_proj=dolfin.project(theta_analytic,sim[method][1].function_space())
-        #     errmethod={}
-        #     for method in sim:
-        #         errmethod[method]=(dolfin.errornorm(theta_analytic_proj,sim[method][1],norm_type='L2')/dolfin.norm(theta_analytic_proj),
-        #                            dolfin.norm(theta_analytic_proj.vector()-sim[method][1].vector(),'linf')/dolfin.norm(theta_analytic_proj.vector(),'linf'))
-        
-        #     # Zkontroluj vliv project/interpolation!!!
-        
-        #     # Vytvorime csv soubor na zapisovani:
-        #     if rank==0:
-        #         with open('./out/data/'+str(DIM)+'d/error_norms.csv', 'w') as csvfile:
-        #             filewriter = csv.writer(csvfile, delimiter=',',
-        #                                     quotechar='|',
-        #                                     quoting=csv.QUOTE_MINIMAL)
-        #             # Zapisujeme typ metody, L2 a L inf normu rel chyby
-        #             filewriter.writerow(['method', 'l2norm', 'linfnorm'])
-        #             for method in sim:
-        #                 filewriter.writerow([method,
-        #                                      str(errmethod[method][0]),
-        #                                      str(errmethod[method][1])])
-        #                 # Na posledni radek zapiseme parametry diskretizace
-        #                 filewriter.writerow(['$\epsilon='+str(em.eps)+'$',
-        #                                      '$nx='+str(prm.meshres)+'$',
-        #                                      '$dt='+str(dt)+'$'] )
-        # konec sekce pro vypisovani chyb do csv filu
-        #==========================================================
-
-        #================================================
-        
-        # Vypisovani dat pro konvergencni tabulku:
-
-        # Projekce presneho reseni:
-        if sim:
+        # Convergence data:
+        if CONVERGENCE and sim:
             theta_analytic_proj=dolfin.project(theta_analytic,sim[method][1].function_space())
             errmethod={}
             for method in sim:
@@ -725,10 +698,10 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                                    dolfin.norm(theta_analytic_proj.vector()-sim[method][1].vector(),'linf')/dolfin.norm(theta_analytic_proj.vector(),'linf'),
                                    abs(front_positions[method][-1]-2*lambda_*np.sqrt(dat_timeset[-1]))/2*lambda_*np.sqrt(dat_timeset[-1])
                 ]
-        
+            
             # Zkontroluj vliv project/interpolation!!!
         
-            # Vytvorime csv soubor na zapisovani:
+            # Write into file:
             if rank==0:
                 with open('./out/data/'+str(DIM)+'d/convergence.csv', 'a') as csvfile:
 
@@ -737,7 +710,7 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                                             quoting=csv.QUOTE_MINIMAL
                     )
                     
-                    params='\# cells='+str(mesh.num_cells())+' (h='+'{0:.3f}'.format(mesh.hmax())+') dt='+'{0:>2.3e}'.format(dt)
+                    params='\# cells='+str(mesh.num_cells())+' (h='+'{0:>2.3e}'.format(mesh.hmax())+') dt='+'{0:>2.3e}'.format(dt)
                     for method in sim:
                         filewriter.writerow([params,
                                              method,
@@ -746,7 +719,6 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                                              '{0:>2.3e}'.format(errmethod[method][2])
                         ])
                         params=''
-        # konec sekce pro vypisovani chyb do csv filu
         #==========================================================
                 
     return stefan_loop
@@ -758,7 +730,7 @@ def stefan_benchmark():
     # find lambda and return analytic solution:
     (lambda_,theta_analytic,q_in,q_out)=stefan_analytic_sol(DIM)()
     # do the computation:
-    stefan_benchmark_sim(mesh,boundary,n,dx,ds,lambda_,theta_analytic,q_in,q_out,['cao','ehc'])()
+    stefan_benchmark_sim(mesh,boundary,n,dx,ds,lambda_,theta_analytic,q_in,q_out,['EHC','TTM'])()
 
 # Poznamka z 7.6.: bohuzel nelinearni formulace nekonverguje pro Cinf aproximace heavisida a diraca u cp_eff, pokud zvolis C1/Cinf pro HS/D pak to funguje, pro Cinf/Cinf haze nan pro reziduum, prozkoumej co se deje
 

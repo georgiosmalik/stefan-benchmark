@@ -8,19 +8,22 @@ import post.my_plot as mplt
 
 from matplotlib.legend_handler import HandlerLine2D, HandlerTuple
 from matplotlib.lines import Line2D
+from scipy.interpolate import UnivariateSpline
 
 DIM=0
+R_START=0
+R_END=1.
 
 # Graphic parameters for particular FEM solutions:
 linestyle={"analytic":{"color":mplt.mypalette[0],
                        "marker":''},
-           "ehc":{"color":mplt.mypalette[1],
+           "EHC":{"color":mplt.mypalette[1],
                   "marker":'o'
            },
-           "em":{"color":mplt.mypalette[2],
+           "EHCreg":{"color":mplt.mypalette[2],
                  "marker":'v'
            },
-           "cao":{"color":mplt.mypalette[3],
+           "TTM":{"color":mplt.mypalette[3],
                   "marker":'s'
            }
 }
@@ -35,7 +38,6 @@ def graph_temp(dat_timeset,plot_timeset,theta_analytic,sim,data_hdf,comm,rank,bb
     color_id=1
     names=[]
     plots=[]
-    first_legend_elems=[]
     
     for t in plot_timeset:
         theta_analytic.t=t
@@ -111,10 +113,15 @@ def graph_temp(dat_timeset,plot_timeset,theta_analytic,sim,data_hdf,comm,rank,bb
             ax.legend(plots,names,loc="lower left",handler_map={tuple: HandlerTuple(ndivide=len(methodplots))})
         else:
             ax.legend(names,loc="lower left")
+
         #------------------------------
         # Save the figure:
-        fig.set_size_inches(mplt.set_size(345./2))
-        fig.savefig('./out/fig/'+str(DIM)+'d/temp_dist.pdf', format='pdf', bbox_inches='tight', transparent=False)
+        fig.set_size_inches(mplt.set_size(345.,ratio=3*(5**.5-1)/8))
+        fig.savefig('./out/fig/'+str(DIM)+'d/temp_dist.pdf',
+                    format='pdf',
+                    bbox_inches='tight',
+                    transparent=False
+        )
         #--------------------------------------------
 
 def graph_temp_diff(dat_timeset,plot_timeset,theta_analytic,sim,data_hdf,comm,rank,bbox):
@@ -180,12 +187,16 @@ def graph_temp_diff(dat_timeset,plot_timeset,theta_analytic,sim,data_hdf,comm,ra
         
         #------------------------------
         # Save the figure:
-        fig.set_size_inches(mplt.set_size(345./2))
-        fig.savefig('./out/fig/'+str(DIM)+'d/temp_dist_diff.pdf', format='pdf', bbox_inches='tight', transparent=False)
+        fig.set_size_inches(mplt.set_size(345.,ratio=(5**.5-1)/2))
+        fig.savefig('./out/fig/'+str(DIM)+'d/temp_dist_diff.pdf',
+                    format='pdf',
+                    bbox_inches='tight',
+                    transparent=False
+        )
         #--------------------------------------------
 
 # Graph melting front position:
-def graph_front_pos(dat_timeset,lambda_,front_positions,offset=False,ls=False):
+def graph_front_pos(dat_timeset,lambda_,front_positions,offset=True,ls=False):
 
     plot_data=[[dat_timeset,2*lambda_*np.sqrt(dat_timeset)]]
     plt.plot(dat_timeset,2*lambda_*np.sqrt(dat_timeset))
@@ -195,6 +206,7 @@ def graph_front_pos(dat_timeset,lambda_,front_positions,offset=False,ls=False):
     timestep=dat_timeset[1]-dat_timeset[0]
     
     for method in front_positions:
+        
         if offset:
             uh=np.asarray(front_positions[method])
             u=2*lambda_*np.sqrt(dat_timeset)
@@ -221,11 +233,14 @@ def graph_front_pos(dat_timeset,lambda_,front_positions,offset=False,ls=False):
             # offset plot:
             plot_data.append([dat_timeset,np.asarray(front_positions[method])+offset])
         legend.append(method)
+                         
     mplt.graph1d(plot_data,
-                 color=mplt.mypalette,
+                 color=mplt.mypalette[:len(front_positions)+1],
                  legend=legend,
+                 linestyle=linestyle,
                  axlabels = [r"$t\,[\mathrm{s}]$",
                              r"$s\,[\mathrm{m}]$"],
+                 xticks=[[dat_timeset[0],dat_timeset[-1]],[r"$t_{\mathrm{start}}$",r"$t_{\mathrm{end}}$"]],
                  savefig={"width":345./2,"name":'./out/fig/'+str(DIM)+'d/front_pos.pdf'},)
 
 # Graph difference between FEM and analytic melting front position:
@@ -236,3 +251,36 @@ def graph_front_pos_diff(dat_timeset,lambda_,front_positions):
         plot_data.append([dat_timeset,abs(front_positions[method]-2*lambda_*np.sqrt(dat_timeset))])
         legend.append(method)
     mplt.graph1d(plot_data,color=mplt.mypalette[1:],legend=legend,savefig={"width":345./2,"name":'./out/fig/'+str(DIM)+'d/front_pos_diff.pdf'},)
+
+def graph_front_vel(timeset,lambda_,front_positions, interpolation=True):
+    plot_data=[[timeset[1:],lambda_/np.sqrt(timeset[1:])]]
+    legend=['analytic']
+
+    tau=timeset[-1]-timeset[0]
+    timestep=timeset[1]-timeset[0]
+    
+    if interpolation:
+        for method in front_positions:
+            # spline interpolation
+            pos_spline=UnivariateSpline(timeset,front_positions[method],k=3)
+            vel_spline=pos_spline.derivative()
+        
+            plot_data.append([timeset[1:],vel_spline(timeset[1:])])
+            legend.append(method)
+    else:
+        for method in front_positions:
+            
+            plot_data.append([timeset[1:],(np.asarray(front_positions[method][1:])-np.asarray(front_positions[method][:-1]))/timestep])
+            legend.append(method)
+            
+    mplt.graph1d(plot_data,
+                 color=2*mplt.mypalette[:len(front_positions)+1],
+                 legend=legend,
+                 linestyle=linestyle,
+                 axlabels = [r"$t\,[\mathrm{s}]$",
+                             r"$s\,[\mathrm{m}]$"],
+                 xticks=[[timeset[0],timeset[-1]],[r"$t_{\mathrm{start}}$",r"$t_{\mathrm{end}}$"]],
+                 savefig={"width":345./2,
+                          "name":'./out/fig/'+str(DIM)+'d/front_vel.pdf'
+                 },
+    )
