@@ -14,7 +14,7 @@ from ufl import tanh
 
 # Global parameters
 # Mollification constants
-EPS = 0.4
+EPS = dolfin.Constant(0.4)
 DEG = 'Cinf'
 C_EPS=1.
 
@@ -169,7 +169,7 @@ def set_eps(mesh,theta):
     theta_norm=dolfin.project(dolfin.sqrt(dolfin.inner(dolfin.grad(theta),dolfin.grad(theta))),theta.function_space())
     theta_grad_max=theta_norm.vector().norm('linf')
     global EPS
-    EPS=C_EPS*h_min*theta_grad_max
+    EPS.assign(C_EPS*h_min*theta_grad_max)
 # #---------------------------------
 # # Enthalpy method formulation from Cao, 1990:
 # # Source term:

@@ -96,6 +96,9 @@ GRAPH_FRONT_VEL=True
 CONVERGENCE=False
 SAVE_DAT=True
 TEMP_TXT_DAT=True
+
+# Temporal scheme for EHC model
+THETA=0.75
 #=====================================
 
 def stefan_analytic_sol(dim, ploteq=False):
@@ -117,7 +120,7 @@ def stefan_analytic_sol(dim, ploteq=False):
 
             # podle clanku:
             f=lambda x: prm.rho*prm.L_m*x-prm.q_0*np.exp(-x*x/prm.kappa_l)+prm.k_s/np.sqrt(prm.kappa_s*np.pi)*(prm.theta_m - prm.theta_inf)/erfc(x/np.sqrt(prm.kappa_s))*np.exp(-x*x/prm.kappa_s)
-            lambda_ = fsolve(f,0.00001)
+            lambda_ = fsolve(f,0.00001,xtol=1e-10)
             if savefig:
                 ax, _ = graph_transcendental_eq(lambda_,f,1)
                 ax.axhline(y=0, lw=1, color='k')
@@ -504,7 +507,7 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                 # Nonlinear formulation:
                 if nonlinear:
                     
-                    F = k_eff(theta,deg='C0')*dolfin.inner(dolfin.grad(theta),dolfin.grad(theta_))*dx+prm.rho/dt*0.5*(c_p_eff(theta,deg='C0')+c_p_eff(theta_k,deg='C0'))*(dolfin.inner(theta,theta_)-dolfin.inner(theta_k, theta_))*dx-sum(q_form)
+                    F = k_eff(theta,deg='C0')*dolfin.inner(dolfin.grad(theta),dolfin.grad(theta_))*dx+prm.rho/dt*(THETA*c_p_eff(theta,deg='C0')+(1-THETA)*c_p_eff(theta_k,deg='C0'))*(dolfin.inner(theta,theta_)-dolfin.inner(theta_k, theta_))*dx-sum(q_form)
 
                     problem = dolfin.NonlinearVariationalProblem(F,theta,bcs=bc_form,J=dolfin.derivative(F,theta))
                     solver = dolfin.NonlinearVariationalSolver(problem)

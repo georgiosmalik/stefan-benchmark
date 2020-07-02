@@ -273,7 +273,7 @@ def graph_front_pos_diff(timeset,lambda_,front_positions):
                  savefig={"width":345./2,"name":'./out/fig/'+str(DIM)+'d/front_pos_diff.pdf'},
     )
 
-def graph_front_vel(timeset,lambda_,front_positions, interpolation=False, curvefit=False):
+def graph_front_vel(timeset,lambda_,front_positions, interpolation=True, curvefit=False):
     plot_data=[[timeset[1:],lambda_/np.sqrt(timeset[1:])]]
     legend=['analytic']
 
