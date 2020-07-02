@@ -9,6 +9,7 @@ import post.my_plot as mplt
 from matplotlib.legend_handler import HandlerLine2D, HandlerTuple
 from matplotlib.lines import Line2D
 from scipy.interpolate import UnivariateSpline
+from scipy.optimize import curve_fit
 
 DIM=0
 R_START=0
@@ -28,16 +29,17 @@ linestyle={"analytic":{"color":mplt.mypalette[0],
            }
 }
 
-def graph_temp(dat_timeset,plot_timeset,theta_analytic,sim,data_hdf,comm,rank,bbox):
+def graph_temp(dat_timeset,plot_timeset,lambda_,theta_analytic,sim,data_hdf,comm,rank,bbox):
 
     fig, ax = plt.subplots(1,1)
-    ax.set_xlabel(r"$r\,[\mathrm{m}]$")
-    ax.set_ylabel(r"$\theta\,[\mathrm{K}]$")
+    #ax.set_xlabel(r"$r\,[\mathrm{m}]$")
+    #ax.set_ylabel(r"$\theta\,[\mathrm{K}]$")
 
     # Pomocne veliciny pro vykreslovani grafu teplotnich poli:
     color_id=1
-    names=[]
+    names=[r"$t_0$"]
     plots=[]
+    xticks=[[prm.R1,2*lambda_*np.sqrt(plot_timeset[0])],[r"$r_1$",r"$s(t_0)$"],]
     
     for t in plot_timeset:
         theta_analytic.t=t
@@ -62,9 +64,12 @@ def graph_temp(dat_timeset,plot_timeset,theta_analytic,sim,data_hdf,comm,rank,bb
                      marker=linestyle["analytic"]["marker"]
             )
 
-        # Create legend with time steps:
-        stamp=(t-dat_timeset[0])/(dat_timeset[-1]-dat_timeset[0])
-        names.append("$t=t_0+"+str(f"{stamp:.1f}")+"\!\cdot\! \\tau$")
+        if t in plot_timeset[1:-1]:
+            # Create legend with time steps:
+            stamp=(t-dat_timeset[0])/(dat_timeset[-1]-dat_timeset[0])
+            names.append(r"$t_"+str(color_id-1)+"=t_0+"+str(f"{stamp:.1f}")+"\!\cdot\! \\tau$")
+            xticks[0].append(2*lambda_*np.sqrt(t))
+            xticks[1].append(r"$s(t_"+str(color_id-1)+")$")
 
         methodplots=()
             
@@ -101,6 +106,11 @@ def graph_temp(dat_timeset,plot_timeset,theta_analytic,sim,data_hdf,comm,rank,bb
             plots.append(methodplots)
         color_id=color_id+1
 
+    names.append(r"$t_\mathrm{max}$")
+    xticks[0].extend([2*lambda_*np.sqrt(plot_timeset[-1]),prm.R2])
+    xticks[1].extend([r"$s(t_\mathrm{max})$",r"$r_2$"])
+    
+
     # Create two graph legends, for methods and timesteps:
     if rank==0:
         second_legend_elems = [Line2D([0],[0],color=mplt.mypalette[1],label='analytic')]
@@ -110,13 +120,18 @@ def graph_temp(dat_timeset,plot_timeset,theta_analytic,sim,data_hdf,comm,rank,bb
         second_legend=plt.legend(handles=second_legend_elems,loc="upper right")
         ax2 = plt.gca().add_artist(second_legend)
         if methodplots:
-            ax.legend(plots,names,loc="lower left",handler_map={tuple: HandlerTuple(ndivide=len(methodplots))})
+            ax.legend(plots,names,loc="center right",handler_map={tuple: HandlerTuple(ndivide=len(methodplots))})
         else:
             ax.legend(names,loc="lower left")
 
+        # Make custom ticks:
+        ax.set_xticks(xticks[0])
+        ax.set_xticklabels(xticks[1])
+        ax.set_yticks([prm.theta_m])
+        ax.set_yticklabels([r"$\theta_\mathrm{m}$"])
         #------------------------------
         # Save the figure:
-        fig.set_size_inches(mplt.set_size(345.,ratio=3*(5**.5-1)/8))
+        fig.set_size_inches(mplt.set_size(345.,ratio=3*(5**.5-1)/8),forward=True)
         fig.savefig('./out/fig/'+str(DIM)+'d/temp_dist.pdf',
                     format='pdf',
                     bbox_inches='tight',
@@ -196,7 +211,7 @@ def graph_temp_diff(dat_timeset,plot_timeset,theta_analytic,sim,data_hdf,comm,ra
         #--------------------------------------------
 
 # Graph melting front position:
-def graph_front_pos(dat_timeset,lambda_,front_positions,offset=True,ls=False):
+def graph_front_pos(dat_timeset,lambda_,front_positions,offset=False,ls=False):
 
     plot_data=[[dat_timeset,2*lambda_*np.sqrt(dat_timeset)]]
     plt.plot(dat_timeset,2*lambda_*np.sqrt(dat_timeset))
@@ -238,27 +253,39 @@ def graph_front_pos(dat_timeset,lambda_,front_positions,offset=True,ls=False):
                  color=mplt.mypalette[:len(front_positions)+1],
                  legend=legend,
                  linestyle=linestyle,
-                 axlabels = [r"$t\,[\mathrm{s}]$",
+                 axlabels = [r"",
                              r"$s\,[\mathrm{m}]$"],
-                 xticks=[[dat_timeset[0],dat_timeset[-1]],[r"$t_{\mathrm{start}}$",r"$t_{\mathrm{end}}$"]],
+                 xticks=[[dat_timeset[0],dat_timeset[-1]],[r"$t_0$",r"$t_{\mathrm{max}}$"]],
                  savefig={"width":345./2,"name":'./out/fig/'+str(DIM)+'d/front_pos.pdf'},)
 
 # Graph difference between FEM and analytic melting front position:
-def graph_front_pos_diff(dat_timeset,lambda_,front_positions):
+def graph_front_pos_diff(timeset,lambda_,front_positions):
     plot_data=[]
     legend=[]
     for method in front_positions:
-        plot_data.append([dat_timeset,abs(front_positions[method]-2*lambda_*np.sqrt(dat_timeset))])
+        plot_data.append([timeset,abs(front_positions[method]-2*lambda_*np.sqrt(timeset))])
         legend.append(method)
-    mplt.graph1d(plot_data,color=mplt.mypalette[1:],legend=legend,savefig={"width":345./2,"name":'./out/fig/'+str(DIM)+'d/front_pos_diff.pdf'},)
+    mplt.graph1d(plot_data,
+                 color=mplt.mypalette[1:],
+                 legend=legend,
+                 xticks=[[timeset[0],timeset[-1]],
+                         [r"$t_0$",r"$t_{\mathrm{max}}$"]],
+                 savefig={"width":345./2,"name":'./out/fig/'+str(DIM)+'d/front_pos_diff.pdf'},
+    )
 
-def graph_front_vel(timeset,lambda_,front_positions, interpolation=True):
+def graph_front_vel(timeset,lambda_,front_positions, interpolation=False, curvefit=False):
     plot_data=[[timeset[1:],lambda_/np.sqrt(timeset[1:])]]
     legend=['analytic']
 
     tau=timeset[-1]-timeset[0]
     timestep=timeset[1]-timeset[0]
-    
+
+    # Curve fit model:
+    def f(x,a,b):
+        return a/np.sqrt(x)+b
+
+
+    # Interpolation
     if interpolation:
         for method in front_positions:
             # spline interpolation
@@ -267,9 +294,17 @@ def graph_front_vel(timeset,lambda_,front_positions, interpolation=True):
         
             plot_data.append([timeset[1:],vel_spline(timeset[1:])])
             legend.append(method)
+    # Curve fitting:
+    elif curvefit:
+        for method in front_positions:
+            # curve fit
+            c_fit=curve_fit(f,timeset[1:],(np.asarray(front_positions[method][1:])-np.asarray(front_positions[method][:-1]))/timestep)
+        
+            plot_data.append([timeset,c_fit[0][0]/np.sqrt(timeset)+c_fit[0][1]])
+            legend.append(method)
     else:
         for method in front_positions:
-            
+    
             plot_data.append([timeset[1:],(np.asarray(front_positions[method][1:])-np.asarray(front_positions[method][:-1]))/timestep])
             legend.append(method)
             
@@ -277,9 +312,9 @@ def graph_front_vel(timeset,lambda_,front_positions, interpolation=True):
                  color=2*mplt.mypalette[:len(front_positions)+1],
                  legend=legend,
                  linestyle=linestyle,
-                 axlabels = [r"$t\,[\mathrm{s}]$",
-                             r"$s\,[\mathrm{m}]$"],
-                 xticks=[[timeset[0],timeset[-1]],[r"$t_{\mathrm{start}}$",r"$t_{\mathrm{end}}$"]],
+                 axlabels = [r"",
+                             r"$\mathbf{\nu}_{\sigma}\,[\mathrm{m}/\mathrm{s}]$"],
+                 xticks=[[timeset[0],timeset[-1]],[r"$t_0$",r"$t_{\mathrm{max}}$"]],
                  savefig={"width":345./2,
                           "name":'./out/fig/'+str(DIM)+'d/front_vel.pdf'
                  },

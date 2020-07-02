@@ -95,6 +95,7 @@ GRAPH_FRONT_POS=True
 GRAPH_FRONT_VEL=True
 CONVERGENCE=False
 SAVE_DAT=True
+TEMP_TXT_DAT=True
 #=====================================
 
 def stefan_analytic_sol(dim, ploteq=False):
@@ -603,7 +604,7 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
 
         print('dt='+str(dt)+', eps='+str(em.EPS)+', h_min='+str(mesh.hmin())+', lambda='+str(lambda_)+', q_0='+str(prm.q_0))
 
-        # index=0
+        index=0
         
         # Time loop: 
         for t in np.nditer(sim_timeset):
@@ -660,18 +661,27 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                 for method in sim:
                     data_hdf.write(sim[method][1],"theta_"+method,t)
                     data_xdmf.write(sim[method][1],t=t)
-                
-                    # if t in dat_timeset[3:]:
-                    #     print(abs(front_position-2*lambda_*np.sqrt(t)))
-                    #     p=dolfin.Point(front_position)
-                    #     print(sim[method][1](p),theta_analytic(p))
-                    #     temp2=dolfin.project(em.mollify(272,285,theta,x0=prm.theta_m,eps=0.4,deg='exact'),sim[method][1].function_space())
-                    #     dolfin.plot(sim[method][1])
-                    #     dolfin.plot(theta_analytic, mesh=mesh)
-                    #     dolfin.plot(temp2)
-                    #     plt.show()
-                    #     exit()
 
+            # Kod na vytvareni binarnich datovych souboru
+            if TEMP_TXT_DAT and (t in plot_timeset):
+                # Creating output file:
+                output_file = 'out/data/'+str(DIM)+'d/data_t_%s.txt' % (str(index))
+                file_ = open(output_file, 'w')
+                file_.write('x theta_analytic theta_EHC theta_TTM\n')
+                file_.write('- -------------- --------- ---------\n')
+            
+                # polomer se rozdeli na intervaly delky hmin
+                x_range = np.arange(prm.R1,prm.R2,mesh.hmin())
+                for x in x_range:
+                    row='{:f}'.format(x)+' '
+                    p=dolfin.Point(x,0.,0.)
+                    row=row+'{:f}'.format(theta_analytic(p))+' '
+                    for method in sim:
+                        row=row+'{:f}'.format(sim[method][1](p))+' '
+                    row=row+'\n'
+                    file_.write(row)
+                file_.close()
+                index=index+1
         #----------------------
         # Visual postprocessing
         #======================
@@ -679,7 +689,8 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
         # 1d graphs:
         if GRAPH_TEMP_DIST and rank==0:
             # Graph temp distribution along ray from origin:
-            splt.graph_temp(dat_timeset,plot_timeset,theta_analytic,sim,data_hdf,comm,rank,bbox)
+            splt.graph_temp(dat_timeset,plot_timeset,lambda_,theta_analytic,sim,data_hdf,comm,rank,bbox)
+            
 
         if GRAPH_FRONT_POS and rank==0:
             # Graph position of the melting front:
@@ -720,6 +731,8 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                         ])
                         params=''
         #==========================================================
+        data_hdf.close()
+        data_xdmf.close()
                 
     return stefan_loop
 
