@@ -76,10 +76,10 @@ R_END=0.65
 splt.R_END=R_END
 
 # CFL condition constant
-C_CFL=0.1
+C_CFL=1.
 
 # Mollification constant
-em.C_EPS=.1
+em.C_EPS=1.
 
 # Number of timesteps, overridden by CFL condition
 TIMESTEPS=1000
@@ -90,15 +90,15 @@ NEWTON_PARAMS.add("absolute_tolerance",1e-5)
 NEWTON_PARAMS.add("maximum_iterations",25)
 
 # Specify data output
-GRAPH_TEMP_DIST=True
-GRAPH_FRONT_POS=True
-GRAPH_FRONT_VEL=True
-CONVERGENCE=False
-SAVE_DAT=True
-TEMP_TXT_DAT=True
+GRAPH_TEMP_DIST=False
+GRAPH_FRONT_POS=False
+GRAPH_FRONT_VEL=False
+CONVERGENCE=True
+SAVE_DAT=False
+TEMP_TXT_DAT=False
 
 # Temporal scheme for EHC model
-THETA=0.75
+THETA=0.25
 #=====================================
 
 def stefan_analytic_sol(dim, ploteq=False):
@@ -605,7 +605,7 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
         # Set epsilon (mollifying parameter)
         em.set_eps(mesh,dolfin.project(theta_analytic,T))
 
-        print('dt='+str(dt)+', eps='+str(em.EPS)+', h_min='+str(mesh.hmin())+', lambda='+str(lambda_)+', q_0='+str(prm.q_0))
+        print('dt='+str(dt)+', eps='+str(float(em.EPS))+', h_min='+str(mesh.hmin())+', lambda='+str(lambda_)+', q_0='+str(prm.q_0))
 
         index=0
         
@@ -734,8 +734,9 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                         ])
                         params=''
         #==========================================================
-        data_hdf.close()
-        data_xdmf.close()
+        if SAVE_DAT:
+            data_hdf.close()
+            data_xdmf.close()
                 
     return stefan_loop
 

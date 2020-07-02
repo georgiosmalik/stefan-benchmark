@@ -33,7 +33,7 @@ if __name__ == "__main__":
     # nize se nastavuji konstanty ktere ovlivnuji vypocet (prvni souvisi s casovym krokem, druhe s sirkou mushy regionu, treti s prostorovou diskretizace, ta treti ted koresponduje s 1d variantou, zbyle jsou univerzalni)
     sim.stefan_benchmark.C_CFL=1.
     sim.stefan_benchmark.em.C_EPS=1.
-    sim.stefan_benchmark.prm.meshres=500
+    sim.stefan_benchmark.prm.meshres=5000
 
     # Run simulation:
     sim.stefan_benchmark.DIM=dim

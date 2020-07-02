@@ -15,6 +15,9 @@ DIM=0
 R_START=0
 R_END=1.
 
+# Make post-process separated
+#DATA=dolfin.HDF5File('./out/data/'+str(DIM)+'d/data.h5',"r")
+
 # Graphic parameters for particular FEM solutions:
 linestyle={"analytic":{"color":mplt.mypalette[0],
                        "marker":''},
@@ -273,7 +276,7 @@ def graph_front_pos_diff(timeset,lambda_,front_positions):
                  savefig={"width":345./2,"name":'./out/fig/'+str(DIM)+'d/front_pos_diff.pdf'},
     )
 
-def graph_front_vel(timeset,lambda_,front_positions, interpolation=True, curvefit=False):
+def graph_front_vel(timeset,lambda_,front_positions, interpolation=False, curvefit=True):
     plot_data=[[timeset[1:],lambda_/np.sqrt(timeset[1:])]]
     legend=['analytic']
 
@@ -319,3 +322,6 @@ def graph_front_vel(timeset,lambda_,front_positions, interpolation=True, curvefi
                           "name":'./out/fig/'+str(DIM)+'d/front_vel.pdf'
                  },
     )
+
+if __name__ == "__main__":
+    DIM=int(sys.argv[1][0])
