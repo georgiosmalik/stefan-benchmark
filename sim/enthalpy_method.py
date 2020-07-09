@@ -169,7 +169,7 @@ def set_eps(mesh,theta):
     theta_norm=dolfin.project(dolfin.sqrt(dolfin.inner(dolfin.grad(theta),dolfin.grad(theta))),theta.function_space())
     theta_grad_max=theta_norm.vector().norm('linf')
     global EPS
-    EPS.assign(C_EPS*h_min*theta_grad_max)
+    EPS.assign(h_min*theta_grad_max/C_EPS)
 # #---------------------------------
 # # Enthalpy method formulation from Cao, 1990:
 # # Source term:

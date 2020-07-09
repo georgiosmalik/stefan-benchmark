@@ -31,7 +31,6 @@
 # Chyby:
 # zkontroluj c_p_eff, c_pm uz je obsazeno v mollify
 # formulace ehc je spatne, nederivujes cp, ale jen teplotu
-# DD formulace, spatne okrajovky
 
 
 import dolfin
@@ -61,7 +60,7 @@ dolfin.set_log_level(30)
 # Global parameters of the simulation
 #====================================
 DIM=0
-BOUNDARY_FORMULATION="DN"
+BOUNDARY_FORMULATION="NN"
 
 # Flag for linear/nonlinear formulation of ehc and em
 NONLINEAR=True
@@ -81,24 +80,19 @@ C_CFL=1.
 # Mollification constant
 em.C_EPS=1.
 
-# Number of timesteps, overridden by CFL condition
-TIMESTEPS=1000
-
 # Nonlinear solver parameters
 NEWTON_PARAMS=dolfin.Parameters("newton_solver")
 NEWTON_PARAMS.add("absolute_tolerance",1e-5)
 NEWTON_PARAMS.add("maximum_iterations",25)
 
 # Specify data output
-GRAPH_TEMP_DIST=False
-GRAPH_FRONT_POS=False
-GRAPH_FRONT_VEL=False
-CONVERGENCE=True
+GRAPH=False
+CONVERGENCE=False
 SAVE_DAT=False
 TEMP_TXT_DAT=False
-
+SAVE_FRONT_POS_TXT=True
 # Temporal scheme for EHC model
-THETA=0.25
+THETA=0.5
 #=====================================
 
 def stefan_analytic_sol(dim, ploteq=False):
@@ -159,7 +153,7 @@ def stefan_analytic_sol(dim, ploteq=False):
             # podle clanku:
             f = lambda x : prm.rho*prm.L_m*x**2 - prm.q_0/(4*np.pi)*np.exp(-(x**2)/(prm.kappa_l)) - prm.k_s*(prm.theta_m-prm.theta_inf)*np.exp(-(x**2)/prm.kappa_s)/(expi(-(x**2)/prm.kappa_s))
             
-            lambda_ = fsolve(f,0.00001)
+            lambda_ = fsolve(f,0.00001,xtol=1e-10)
             
             if savefig:
                 ax, _ = graph_transcendental_eq(lambda_,f,2)
@@ -260,7 +254,7 @@ def stefan_analytic_sol(dim, ploteq=False):
             # podle clanku:
             f = lambda x : prm.rho*prm.L_m*x**3 - prm.q_0/(16*np.pi)*np.exp(-(x**2)/prm.kappa_l) + prm.k_s*np.sqrt(prm.kappa_s)*(prm.theta_m - prm.theta_inf)*np.exp(-(x**2)/prm.kappa_s)/((-2)*gamma(0.5)*gammaincc(0.5,x**2/prm.kappa_s) + 2*np.sqrt(prm.kappa_s)/x*np.exp(-x**2/prm.kappa_s))
 
-            lambda_ = fsolve(f,0.00001)
+            lambda_ = fsolve(f,0.00001,xtol=1e-10)
             
             if savefig:
                 ax, _ = graph_transcendental_eq(lambda_,f,3)
@@ -370,25 +364,22 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
     
     def stefan_loop_timesets():
         # Nastav pocatecni a koncovy cas podle presne polohy fronty tani:
-        t_start=(R_START/(2*lambda_))**2
-        t_end=(R_END/(2*lambda_))**2
+        t_0=(R_START/(2*lambda_))**2
+        t_max=(R_END/(2*lambda_))**2
 
         # Set timestep based on standart CFL condition:
         hmin=mesh.hmin()
 
         # Maximal velocity of melting front:
-        vmax=lambda_/np.sqrt(t_start)
+        vmax=lambda_/np.sqrt(t_0)
 
         global dt
 
         # Timestep given by CFL:
         dt=C_CFL*hmin/vmax
 
-        # Timestep given by number of TIMESTEPS:
-        #dt=int((t_end-t_start)/TIMESTEPS)
-
         # Vytvor timeset pro simulaci:
-        sim_timeset=np.arange(t_start,t_end,dt)
+        sim_timeset=np.arange(t_0,t_max,dt)
 
         # Vytvor timeset pro ukladani:
         numdats=100
@@ -579,7 +570,7 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
         #-------------------------------------
         # Data files:
 
-        # I. Simulation results:
+        # I. FEniCS data (ParaView):
 
         if SAVE_DAT:
             # Create HDF5 for data storing:
@@ -594,26 +585,63 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
             # Common mesh for all stored functions, lowers file size:
             data_xdmf.parameters['functions_share_mesh']=True
         
-        # II. Melting front position:
+        # II. Python data (matplotlib):
 
-        # Dict front_positions contains melting front positions:
-        front_positions={}
+        data_py={"front_pos":{},
+                 "temp_dist":{},
+                 "disc_params":{},
+                 "problem_params":{"r1":prm.R1,
+                                   "r2":prm.R2,
+                                   "q0":prm.q_0,
+                                   "lambda":lambda_,
+                                   "sim_timeset":sim_timeset,
+                                   "formulation":BOUNDARY_FORMULATION
+                 }
+        }
         
         for method in sim:
-            front_positions[method]=[]
+            data_py["front_pos"][method]=[]
+
+        # III. Optional:
+        if SAVE_FRONT_POS_TXT:
+            # Creating output file:
+            output_file = 'out/data/'+str(DIM)+'d/data_front_pos.txt'
+            file_front_pos = open(output_file, 'w')
+            file_front_pos.write('t s_analytic s_EHC s_TTM\n')
+            file_front_pos.write('- ---------- ----- -----\n')
         #--------------------------------------
         # Set epsilon (mollifying parameter)
         em.set_eps(mesh,dolfin.project(theta_analytic,T))
 
         print('dt='+str(dt)+', eps='+str(float(em.EPS))+', h_min='+str(mesh.hmin())+', lambda='+str(lambda_)+', q_0='+str(prm.q_0))
 
+        # Save discretization parameters:
+        if SAVE_DAT:
+            data_hdf.write(dolfin.project(em.C_EPS,T),"C_eps")
+            data_hdf.write(dolfin.project(C_CFL,T),"C_CFL")
+            data_hdf.write(dolfin.project(mesh.hmin(),T),"h_min")
+
+        data_py["disc_params"]["C_eps"]=em.C_EPS
+        data_py["disc_params"]["C_CFL"]=C_CFL
+        data_py["disc_params"]["h_min"]=mesh.hmin()
+        data_py["disc_params"]["eps"]=float(em.EPS)
+        data_py["disc_params"]["dt"]=dt
+        data_py["disc_params"]["meshres"]=prm.meshres
+        
+        
         index=0
         
         # Time loop: 
         for t in np.nditer(sim_timeset):
-            # Update to actual time level:
+            
+            # Update problem to current time level:
             stefan_form_update(t)
 
+            # front pos txt:
+            if SAVE_FRONT_POS_TXT:
+                txt_row=str(t)+' '+str(2*lambda_*np.sqrt(t))
+
+            # For melt front shape graph:
             # if index%10==0:
             #     fig, ax = plt.subplots(1,1)
 
@@ -626,7 +654,15 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                 # Front position calculation and export:
                 front_position=stefan_front_position(sim[method][1])()
                 if rank==0:
-                        front_positions[method].append(front_position)
+                    data_py["front_pos"][method].append(front_position)
+
+                if SAVE_FRONT_POS_TXT:
+                    txt_row=txt_row+' '+str(front_position)
+
+            if SAVE_FRONT_POS_TXT:
+                txt_row=txt_row+'\n'
+                file_front_pos.write(txt_row)
+                    
 
             # -----------------------------
             # Graph shape of the melt front
@@ -665,6 +701,39 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                     data_hdf.write(sim[method][1],"theta_"+method,t)
                     data_xdmf.write(sim[method][1],t=t)
 
+            # Uloz do python data filu teplotni pole (paralelne):
+            if t in plot_timeset:
+                data_py["temp_dist"][str(t)]={"analytic":[[],[]]}
+                x_range = np.arange(prm.R1,prm.R2,0.001)
+                y_range = x_range*0.0
+                for i,x in enumerate(x_range):
+                    xp=dolfin.Point(x)
+                    if bbox.compute_collisions(xp):
+                        y_range[i]=theta_analytic(xp)
+                if rank==0:
+                    for process in range(comm.size)[1:]:
+                        y=comm.recv(source=process)
+                        y_range=np.maximum(y_range,y)
+                    data_py["temp_dist"][str(t)]["analytic"][0]=x_range
+                    data_py["temp_dist"][str(t)]["analytic"][1]=y_range
+                if rank!=0:
+                    comm.send(y_range,dest=0)
+
+                for method in sim:
+                    data_py["temp_dist"][str(t)][method]=[[],[]]
+                    for i,x in enumerate(x_range):
+                        xp=dolfin.Point(x)
+                        if bbox.compute_collisions(xp):
+                            y_range[i]=sim[method][1](xp)
+                        if rank==0:
+                            for process in range(comm.size)[1:]:
+                                y=comm.recv(source=process)
+                                y_range=np.maximum(y_range,y)
+                            data_py["temp_dist"][str(t)][method][0]=x_range
+                            data_py["temp_dist"][str(t)][method][1]=y_range
+                        if rank!=0:
+                            comm.send(y_range,dest=0)
+
             # Kod na vytvareni binarnich datovych souboru
             if TEMP_TXT_DAT and (t in plot_timeset):
                 # Creating output file:
@@ -685,23 +754,29 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                     file_.write(row)
                 file_.close()
                 index=index+1
+        #======================
+
+        if SAVE_FRONT_POS_TXT:
+            file_front_pos.close()
+
+        # Save data dictionary for postprocessing:
+        np.save('./out/data/'+str(DIM)+'d/data.npy', data_py)
         #----------------------
         # Visual postprocessing
         #======================
 
         # 1d graphs:
-        if GRAPH_TEMP_DIST and rank==0:
-            # Graph temp distribution along ray from origin:
-            splt.graph_temp(dat_timeset,plot_timeset,lambda_,theta_analytic,sim,data_hdf,comm,rank,bbox)
+        if GRAPH and rank==0:
+            splt.load_data()
             
-
-        if GRAPH_FRONT_POS and rank==0:
+            # Graph temp distribution along ray from origin:
+            splt.graph_temp()
+            
             # Graph position of the melting front:
-            splt.graph_front_pos(sim_timeset,lambda_,front_positions)
-            splt.graph_front_pos_diff(sim_timeset,lambda_,front_positions)
+            splt.graph_front_pos()
 
-        if GRAPH_FRONT_VEL and rank==0:
-            splt.graph_front_vel(sim_timeset,lambda_,front_positions)
+            # Graph velocity of the melting front:
+            splt.graph_front_vel()
         
         # Convergence data:
         if CONVERGENCE and sim:
@@ -748,6 +823,20 @@ def stefan_benchmark():
     (lambda_,theta_analytic,q_in,q_out)=stefan_analytic_sol(DIM)()
     # do the computation:
     stefan_benchmark_sim(mesh,boundary,n,dx,ds,lambda_,theta_analytic,q_in,q_out,['EHC','TTM'])()
+
+# Convergence simulation:
+def stefan_convergence():
+    return None
+
+# Stability benchmark:
+def stefan_stability():
+    step_size=[1e-4,5e-4,1e-3,5e-3,1e-2,5e-2]
+    time_step=[2.5e2,1.25e3,2.5e3,1.25e4,2.5e4,1.25e5]
+    for h in step_size:
+        for dt in time_step:
+            break
+    return None
+
 
 # Poznamka z 7.6.: bohuzel nelinearni formulace nekonverguje pro Cinf aproximace heavisida a diraca u cp_eff, pokud zvolis C1/Cinf pro HS/D pak to funguje, pro Cinf/Cinf haze nan pro reziduum, prozkoumej co se deje
 

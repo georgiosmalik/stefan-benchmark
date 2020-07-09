@@ -21,21 +21,48 @@ if os.path.dirname(__file__):
     os.chdir(os.path.dirname(__file__))
 
 if __name__ == "__main__":
-    dim=int(sys.argv[1][0])
+    dim=int(sys.argv[-1][0])
 
     # Creates directories for output:
     Path("./out/data/"+str(dim)+"d").mkdir(parents=True,exist_ok=True)
     Path("./out/fig/"+str(dim)+"d").mkdir(parents=True,exist_ok=True)
 
+    sim.stefan_benchmark.DIM=dim
+    sim.stefan_benchmark.splt.DIM=dim
+
+    if len(sys.argv)==2:
+        # nize se nastavuji konstanty ktere ovlivnuji vypocet (prvni souvisi s casovym krokem, druhe s sirkou mushy regionu, treti s prostorovou diskretizace, ta treti ted koresponduje s 1d variantou, zbyle jsou univerzalni)
+        sim.stefan_benchmark.C_CFL=1.
+        sim.stefan_benchmark.em.C_EPS=1.
+        sim.stefan_benchmark.prm.meshres=100
+        # Run simulation:
+        sim.stefan_benchmark.GRAPH=False
+        sim.stefan_benchmark.SAVE_DAT=False
+        sim.stefan_benchmark.CONVERGENCE=False
+        sim.stefan_benchmark.stefan_benchmark()
+        
+    elif sys.argv[1]=="convergence":
+        # Run convergence:
+        sim.stefan_benchmark.GRAPH=False
+        sim.stefan_benchmark.SAVE_DAT=False
+        sim.stefan_benchmark.CONVERGENCE=True
+        sim.stefan_benchmark.stefan_convergence()
+        
+    elif sys.argv[1]=="stability":
+        # Run stability:
+        sim.stefan_benchmark.GRAPH=False
+        sim.stefan_benchmark.SAVE_DAT=False
+        sim.stefan_benchmark.CONVERGENCE=False
+        sim.stefan_benchmark.stefan_stability()
+        
+    elif sys.argv[1]=="postprocessing":
+        # Run postprocessing:
+        sim.stefan_benchmark.splt.load_data()
+        sim.stefan_benchmark.splt.graph_temp()
+        sim.stefan_benchmark.splt.graph_front_pos()
+        sim.stefan_benchmark.splt.graph_front_vel()
+        
     # Pokyny k pousteni:
     # pustit prikazem python3 stefan-benchmark 1d z nadrazene slozky
     # kod je pomerne slozity, porad se jedna o pracovni verzi, tedy odpust prosim ten neporadek
-    # nize se nastavuji konstanty ktere ovlivnuji vypocet (prvni souvisi s casovym krokem, druhe s sirkou mushy regionu, treti s prostorovou diskretizace, ta treti ted koresponduje s 1d variantou, zbyle jsou univerzalni)
-    sim.stefan_benchmark.C_CFL=1.
-    sim.stefan_benchmark.em.C_EPS=1.
-    sim.stefan_benchmark.prm.meshres=5000
 
-    # Run simulation:
-    sim.stefan_benchmark.DIM=dim
-    sim.stefan_benchmark.splt.DIM=dim
-    sim.stefan_benchmark.stefan_benchmark()

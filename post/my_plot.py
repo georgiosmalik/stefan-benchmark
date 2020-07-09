@@ -2,7 +2,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 
 # Use 'ggplot' style
-plt.style.use('ggplot')
+plt.style.use('seaborn-whitegrid')
 # Use LaTeX fonts
 plt.style.use('tex')
 
@@ -88,11 +88,16 @@ def graph1d(data,**figprm):
         ax.set_xticks(figprm["xticks"][0])
         ax.set_xticklabels(figprm["xticks"][1])
 
+    # Set yticks:
+    if "yticks" in figprm:
+        ax.set_yticks(figprm["yticks"][0])
+        ax.set_yticklabels(figprm["yticks"][1])
+
     # Set title
     ax.set_title(figprm.get("title",""))
 
     # Set legend
-    ax.legend(figprm.get("legend",None))
+    ax.legend(figprm.get("legend",None), frameon=True, fancybox=False, borderaxespad=0.)
     
     # Save figure
     if "savefig" in figprm:
