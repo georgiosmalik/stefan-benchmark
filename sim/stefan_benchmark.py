@@ -90,7 +90,7 @@ GRAPH=False
 CONVERGENCE=False
 SAVE_DAT=False
 TEMP_TXT_DAT=False
-SAVE_FRONT_POS_TXT=True
+SAVE_FRONT_POS_TXT=False
 # Temporal scheme for EHC model
 THETA=0.5
 #=====================================
@@ -368,7 +368,7 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
         t_max=(R_END/(2*lambda_))**2
 
         # Set timestep based on standart CFL condition:
-        hmin=mesh.hmin()
+        hmax=mesh.hmax()
 
         # Maximal velocity of melting front:
         vmax=lambda_/np.sqrt(t_0)
@@ -376,7 +376,7 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
         global dt
 
         # Timestep given by CFL:
-        dt=C_CFL*hmin/vmax
+        dt=C_CFL*hmax/vmax
 
         # Vytvor timeset pro simulaci:
         sim_timeset=np.arange(t_0,t_max,dt)
@@ -613,17 +613,17 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
         # Set epsilon (mollifying parameter)
         em.set_eps(mesh,dolfin.project(theta_analytic,T))
 
-        print('dt='+str(dt)+', eps='+str(float(em.EPS))+', h_min='+str(mesh.hmin())+', lambda='+str(lambda_)+', q_0='+str(prm.q_0))
+        print('dt='+str(dt)+', eps='+str(float(em.EPS))+', h_max='+str(mesh.hmax())+', lambda='+str(lambda_)+', q_0='+str(prm.q_0))
 
         # Save discretization parameters:
         if SAVE_DAT:
             data_hdf.write(dolfin.project(em.C_EPS,T),"C_eps")
             data_hdf.write(dolfin.project(C_CFL,T),"C_CFL")
-            data_hdf.write(dolfin.project(mesh.hmin(),T),"h_min")
+            data_hdf.write(dolfin.project(mesh.hmax(),T),"h_max")
 
         data_py["disc_params"]["C_eps"]=em.C_EPS
         data_py["disc_params"]["C_CFL"]=C_CFL
-        data_py["disc_params"]["h_min"]=mesh.hmin()
+        data_py["disc_params"]["h_max"]=mesh.hmax()
         data_py["disc_params"]["eps"]=float(em.EPS)
         data_py["disc_params"]["dt"]=dt
         data_py["disc_params"]["meshres"]=prm.meshres
@@ -783,9 +783,10 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
             theta_analytic_proj=dolfin.project(theta_analytic,sim[method][1].function_space())
             errmethod={}
             for method in sim:
+                front_position=data_py["front_pos"][method][-1]
                 errmethod[method]=[dolfin.errornorm(theta_analytic_proj,sim[method][1],norm_type='L2')/dolfin.norm(theta_analytic_proj),
                                    dolfin.norm(theta_analytic_proj.vector()-sim[method][1].vector(),'linf')/dolfin.norm(theta_analytic_proj.vector(),'linf'),
-                                   abs(front_positions[method][-1]-2*lambda_*np.sqrt(dat_timeset[-1]))/2*lambda_*np.sqrt(dat_timeset[-1])
+                                   abs(front_position-2*lambda_*np.sqrt(dat_timeset[-1]))/2*lambda_*np.sqrt(dat_timeset[-1])
                 ]
             
             # Zkontroluj vliv project/interpolation!!!
@@ -799,13 +800,13 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                                             quoting=csv.QUOTE_MINIMAL
                     )
                     
-                    params='\# cells='+str(mesh.num_cells())+' (h='+'{0:>2.3e}'.format(mesh.hmax())+') dt='+'{0:>2.3e}'.format(dt)
+                    params=r'\makecell{$h_{\mathrm{max}}$=\numprint{'+'{0:>2.3e}'.format(mesh.hmax())+r'} \\ ($\Delta t$=\numprint{'+r'{0:>2.3e}'.format(dt)+r'}, $\epsilon$=\numprint{'+'{0:>2.3e}'.format(float(em.EPS))+'})}'
                     for method in sim:
                         filewriter.writerow([params,
                                              method,
-                                             '{0:>2.3e}'.format(errmethod[method][0]),
-                                             '{0:>2.3e}'.format(errmethod[method][1]),
-                                             '{0:>2.3e}'.format(errmethod[method][2])
+                                             r'\numprint{'+'{0:>2.3e}'.format(errmethod[method][0])+'}',
+                                             r'\numprint{'+'{0:>2.3e}'.format(errmethod[method][1])+'}',
+                                             r'\numprint{'+'{0:>2.3e}'.format(errmethod[method][2])+'}'
                         ])
                         params=''
         #==========================================================
@@ -826,7 +827,27 @@ def stefan_benchmark():
 
 # Convergence simulation:
 def stefan_convergence():
-    return None
+    meshres={
+    1:[100,1000,10000],
+    2:[25],
+    3:[0.05,0.025,0.01]
+    }
+
+    with open('./out/data/'+str(DIM)+'d/convergence.csv', 'w') as csvfile:
+        filewriter = csv.writer(csvfile, delimiter=',',
+                                quotechar='|',
+                                quoting=csv.QUOTE_MINIMAL)
+
+        # Zapisujeme typ metody, L2 a L inf normu rel chyby
+        filewriter.writerow(['params',
+                             'method',
+                             'l2norm',
+                             'linfnorm',
+                             'deltas'])
+
+    for nx in meshres[DIM]:
+        prm.meshres=nx
+        stefan_benchmark()
 
 # Stability benchmark:
 def stefan_stability():
