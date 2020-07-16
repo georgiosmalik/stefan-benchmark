@@ -418,7 +418,7 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
     # Metoda na vypocet pozice fronty
     def stefan_front_position(theta):
         #vol_ice=dolfin.assemble(em.mollify(1,0,theta,x0=prm.theta_m,eps=dolfin.DOLFIN_EPS,deg='disC')*dx)
-        vol_ice=dolfin.assemble(em.mollify(1,0,theta-prm.theta_m,x0=0,eps=em.EPS/10.,deg=em.DEG)*dx)
+        vol_ice=dolfin.assemble(em.mollify(1,0,theta-prm.theta_m,x0=0,eps=em.EPS,deg=em.DEG)*dx)
         def front_pos_1d():
             return prm.R2-vol_ice
         def front_pos_2d():
