@@ -12,6 +12,7 @@ from matplotlib.legend_handler import HandlerLine2D, HandlerTuple
 from matplotlib.lines import Line2D
 from scipy.interpolate import UnivariateSpline
 from scipy.optimize import curve_fit
+from scipy.interpolate import CubicSpline
 
 DIM=0
 
@@ -116,10 +117,10 @@ def graph_temp():
     # Save the figure:
     c_eps=data["disc_params"]["C_eps"]
     c_cfl=data["disc_params"]["C_CFL"]
-    h_min=data["disc_params"]["h_min"]
+    h_max=data["disc_params"]["h_max"]
 
     fig.set_size_inches(mplt.set_size(345.,ratio=3*(5**.5-1)/8),forward=True)
-    fig.savefig('./out/fig/'+str(DIM)+'d/temp_dist_(h_min='+'{0:>2.2e}'.format(h_min)+',C_eps='+'{0:>2.1e}'.format(c_eps)+',C_CFL='+'{0:>2.1e}'.format(c_cfl)+').pdf',
+    fig.savefig('./out/fig/'+str(DIM)+'d/temp_dist_(h_max='+'{0:>2.2e}'.format(h_max)+',C_eps='+'{0:>2.1e}'.format(c_eps)+',C_CFL='+'{0:>2.1e}'.format(c_cfl)+').pdf',
                 format='pdf',
                 bbox_inches='tight',
                 transparent=False
@@ -173,7 +174,7 @@ def graph_front_pos(offset=False,ls=False):
     # Save the figure:
     c_eps=data["disc_params"]["C_eps"]
     c_cfl=data["disc_params"]["C_CFL"]
-    h_min=data["disc_params"]["h_min"]
+    h_max=data["disc_params"]["h_max"]
                          
     mplt.graph1d(plot_data,
                  color=mplt.mypalette[:len(front_positions)+1],
@@ -182,7 +183,7 @@ def graph_front_pos(offset=False,ls=False):
                  axlabels=["",r"$s(t)$"],
                  xticks=[[timeset[0],timeset[-1]],[r"$t_0$",r"$t_{\mathrm{max}}$"]],
                  yticks=[[],[]],
-                 savefig={"width":345./2,"name":'./out/fig/'+str(DIM)+'d/front_pos_(h_min='+'{0:>2.2e}'.format(h_min)+',C_eps='+'{0:>2.1e}'.format(c_eps)+',C_CFL='+'{0:>2.1e}'.format(c_cfl)+').pdf'},)
+                 savefig={"width":345./2,"name":'./out/fig/'+str(DIM)+'d/front_pos_(h_max='+'{0:>2.2e}'.format(h_max)+',C_eps='+'{0:>2.1e}'.format(c_eps)+',C_CFL='+'{0:>2.1e}'.format(c_cfl)+').pdf'},)
 
 def graph_front_vel(interpolation=True, curvefit=False):
 
@@ -208,7 +209,9 @@ def graph_front_vel(interpolation=True, curvefit=False):
         for method in methods:
             front_positions=data["front_pos"][method]
             # spline interpolation
-            pos_spline=UnivariateSpline(timeset,front_positions,k=3)
+            #pos_spline=UnivariateSpline(timeset,front_positions,k=4)
+            pos_spline = CubicSpline(timeset, front_positions)
+            vel_spline = pos_spline(timeset,1)
             vel_spline=pos_spline.derivative()
         
             plot_data.append([timeset[1:],vel_spline(timeset[1:])])
@@ -232,7 +235,7 @@ def graph_front_vel(interpolation=True, curvefit=False):
     # Save the figure:
     c_eps=data["disc_params"]["C_eps"]
     c_cfl=data["disc_params"]["C_CFL"]
-    h_min=data["disc_params"]["h_min"]
+    h_max=data["disc_params"]["h_max"]
             
     mplt.graph1d(plot_data,
                  color=2*mplt.mypalette[:len(front_positions)+1],
@@ -242,7 +245,7 @@ def graph_front_vel(interpolation=True, curvefit=False):
                  xticks=[[timeset[0],timeset[-1]],[r"$t_0$",r"$t_{\mathrm{max}}$"]],
                  yticks=[[],[]],
                  savefig={"width":345./2,
-                          "name":'./out/fig/'+str(DIM)+'d/front_vel_(h_min='+'{0:>2.2e}'.format(h_min)+',C_eps='+'{0:>2.1e}'.format(c_eps)+',C_CFL='+'{0:>2.1e}'.format(c_cfl)+').pdf'
+                          "name":'./out/fig/'+str(DIM)+'d/front_vel_(h_max='+'{0:>2.2e}'.format(h_max)+',C_eps='+'{0:>2.1e}'.format(c_eps)+',C_CFL='+'{0:>2.1e}'.format(c_cfl)+').pdf'
                  },
     )
     

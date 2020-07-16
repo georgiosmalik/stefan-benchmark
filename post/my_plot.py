@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 # Use 'ggplot' style
 plt.style.use('seaborn-whitegrid')
 # Use LaTeX fonts
-plt.style.use('tex')
+#plt.style.use('tex')
 #-----------------
 # or equivalently (when 'tex' style sheet N/A):
 # tex_fonts = {
