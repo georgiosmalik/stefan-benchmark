@@ -114,6 +114,9 @@ def meshxml(name): # reads mesh from .xml file, cf. Notes
     mesh.init()
     hdf = dolfin.HDF5File(mesh.mpi_comm(),name+"_hdf.h5", "w")
     hdf.write(mesh, "/mesh")
+    xdmf = dolfin.XDMFFile(mesh.mpi_comm(),name+"_xdmf.xdmf")
+    xdmf.write(mesh)
+    xdmf.close()
     domains=mesh.domains()
     if os.path.isfile(name+"_physical_region.xml"):
         domains.init(mesh.topology().dim() - 1)
