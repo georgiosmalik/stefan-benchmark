@@ -12,6 +12,7 @@ from matplotlib.legend_handler import HandlerLine2D, HandlerTuple
 from matplotlib.lines import Line2D
 from scipy.interpolate import UnivariateSpline
 from scipy.optimize import curve_fit
+from scipy.interpolate import CubicSpline
 
 DIM=0
 
@@ -210,7 +211,9 @@ def graph_front_vel(interpolation=True, curvefit=False):
         for method in methods:
             front_positions=data["front_pos"][method]
             # spline interpolation
-            pos_spline=UnivariateSpline(timeset,front_positions,k=3)
+            #pos_spline=UnivariateSpline(timeset,front_positions,k=4)
+            pos_spline = CubicSpline(timeset, front_positions)
+            vel_spline = pos_spline(timeset,1)
             vel_spline=pos_spline.derivative()
         
             plot_data.append([timeset[1:],vel_spline(timeset[1:])])
