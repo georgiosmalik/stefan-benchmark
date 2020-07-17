@@ -39,7 +39,7 @@ q_0=100                           # heat flux from source in origin
 theta_0 = 373.                      # heating temperature for 1D
 theta_0_3D = 5.                     # heating power for 3D
 theta_m = 273.                      # melting temperature
-theta_inf = 263.                    # initial temperature
+theta_i = 263.                    # initial temperature
 delta_theta = theta_0 - theta_m     # temperature difference
 K = 1.                              # boundary heat flow for Stefan 2D
 theta_left = 283.                   # Heating temperature [K]
@@ -50,6 +50,6 @@ beta = rho_s/rho_l*L_m/cp_l/delta_theta
                                     # Inverse Stefan number
 St_l = cp_l*(theta_0 - theta_m)/L_m
                                     # Stefan number for liquid region
-St_s = cp_s*(theta_m - theta_inf)/L_m
+St_s = cp_s*(theta_m - theta_i)/L_m
                                     # Stefan number for liquid region
 #================================================

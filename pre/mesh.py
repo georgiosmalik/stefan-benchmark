@@ -7,7 +7,6 @@
 import dolfin
 import mshr
 import os
-import matplotlib.pyplot as plt
 #===========================
 
 #-------------------------
@@ -147,7 +146,7 @@ def meshxml(name): # reads mesh from .xml file, cf. Notes
     # Definition of measures and normal vector:
     n = dolfin.FacetNormal(mesh)
     dx = dolfin.Measure("dx", mesh)
-    #return (mesh,boundary,n,dx,ds)
+    return (mesh,boundary,n,dx,ds)
 #-------------------------
 # mesh from hdf file:
 def meshhdf(name):
@@ -159,10 +158,7 @@ def meshhdf(name):
     n = dolfin.FacetNormal(mesh)
     dx = dolfin.Measure("dx", mesh)
     ds = dolfin.Measure("ds", subdomain_data = boundary[0])
-    dolfin.plot(mesh)
-    plt.show()
-    #exit()
-    #return (mesh,boundary,n,dx,ds)
+    return (mesh,boundary,n,dx,ds)
 #=========================
 
 #------------------------

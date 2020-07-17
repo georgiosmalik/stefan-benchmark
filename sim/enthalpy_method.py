@@ -165,9 +165,10 @@ def dirac(xvalue, x, x0=0.0, eps=EPS, deg=DEG):
     return xvalue*df(x,x0,eps,deg)()
 
 def set_eps(mesh,theta):
-    hmax=mesh.hmax()
+    hmax=dolfin.MPI.max(mesh.mpi_comm(),mesh.hmax())
     theta_norm=dolfin.project(dolfin.sqrt(dolfin.inner(dolfin.grad(theta),dolfin.grad(theta))),theta.function_space())
     theta_grad_max=theta_norm.vector().norm('linf')
+    print(theta_grad_max)
     global EPS
     EPS.assign(hmax*theta_grad_max/C_EPS)
 # #---------------------------------

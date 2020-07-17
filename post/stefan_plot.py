@@ -55,6 +55,7 @@ def graph_temp():
     for t in timeset:
         x_range=data["temp_dist"][str(t)]["analytic"][0]
         y_range=data["temp_dist"][str(t)]["analytic"][1]
+
         plt.plot(x_range,
                  y_range,
                  lw=2.,
@@ -75,6 +76,7 @@ def graph_temp():
 
             x_range=data["temp_dist"][str(t)][method][0]
             y_range=data["temp_dist"][str(t)][method][1]
+
             plot,=plt.plot(x_range,
                            y_range,
                            label=method,
@@ -116,10 +118,10 @@ def graph_temp():
     # Save the figure:
     c_eps=data["disc_params"]["C_eps"]
     c_cfl=data["disc_params"]["C_CFL"]
-    h_min=data["disc_params"]["h_min"]
+    h_max=data["disc_params"]["h_max"]
 
     fig.set_size_inches(mplt.set_size(345.,ratio=3*(5**.5-1)/8),forward=True)
-    fig.savefig('./out/fig/'+str(DIM)+'d/temp_dist_(h_min='+'{0:>2.2e}'.format(h_min)+',C_eps='+'{0:>2.1e}'.format(c_eps)+',C_CFL='+'{0:>2.1e}'.format(c_cfl)+').pdf',
+    fig.savefig('./out/fig/'+str(DIM)+'d/temp_dist_(h_max='+'{0:>2.2e}'.format(h_max)+',C_eps='+'{0:>2.1e}'.format(c_eps)+',C_CFL='+'{0:>2.1e}'.format(c_cfl)+').pdf',
                 format='pdf',
                 bbox_inches='tight',
                 transparent=False
@@ -173,16 +175,16 @@ def graph_front_pos(offset=False,ls=False):
     # Save the figure:
     c_eps=data["disc_params"]["C_eps"]
     c_cfl=data["disc_params"]["C_CFL"]
-    h_min=data["disc_params"]["h_min"]
+    h_max=data["disc_params"]["h_max"]
                          
     mplt.graph1d(plot_data,
-                 color=mplt.mypalette[:len(front_positions)+1],
+                 color=mplt.mypalette[:len(methods)+1],
                  legend=legend,
                  linestyle=linestyle,
                  axlabels=["",r"$s(t)$"],
                  xticks=[[timeset[0],timeset[-1]],[r"$t_0$",r"$t_{\mathrm{max}}$"]],
                  yticks=[[],[]],
-                 savefig={"width":345./2,"name":'./out/fig/'+str(DIM)+'d/front_pos_(h_min='+'{0:>2.2e}'.format(h_min)+',C_eps='+'{0:>2.1e}'.format(c_eps)+',C_CFL='+'{0:>2.1e}'.format(c_cfl)+').pdf'},)
+                 savefig={"width":345./2,"name":'./out/fig/'+str(DIM)+'d/front_pos_(h_max='+'{0:>2.2e}'.format(h_max)+',C_eps='+'{0:>2.1e}'.format(c_eps)+',C_CFL='+'{0:>2.1e}'.format(c_cfl)+').pdf'},)
 
 def graph_front_vel(interpolation=True, curvefit=False):
 
@@ -192,7 +194,7 @@ def graph_front_vel(interpolation=True, curvefit=False):
     timeset=data["problem_params"]["sim_timeset"]
     methods=list(data["front_pos"].keys())
     
-    plot_data=[[timeset[1:],lambda_/np.sqrt(timeset[1:])]]
+    plot_data=[[timeset,lambda_/np.sqrt(timeset)]]
     legend=['analytic']
 
     tau=timeset[-1]-timeset[0]
@@ -232,17 +234,17 @@ def graph_front_vel(interpolation=True, curvefit=False):
     # Save the figure:
     c_eps=data["disc_params"]["C_eps"]
     c_cfl=data["disc_params"]["C_CFL"]
-    h_min=data["disc_params"]["h_min"]
+    h_max=data["disc_params"]["h_max"]
             
     mplt.graph1d(plot_data,
-                 color=2*mplt.mypalette[:len(front_positions)+1],
+                 color=2*mplt.mypalette[:len(methods)+1],
                  legend=legend,
                  linestyle=linestyle,
                  axlabels=["",r"$\mathbf{\nu}_{\sigma}(t)$"],
                  xticks=[[timeset[0],timeset[-1]],[r"$t_0$",r"$t_{\mathrm{max}}$"]],
                  yticks=[[],[]],
                  savefig={"width":345./2,
-                          "name":'./out/fig/'+str(DIM)+'d/front_vel_(h_min='+'{0:>2.2e}'.format(h_min)+',C_eps='+'{0:>2.1e}'.format(c_eps)+',C_CFL='+'{0:>2.1e}'.format(c_cfl)+').pdf'
+                          "name":'./out/fig/'+str(DIM)+'d/front_vel_(h_max='+'{0:>2.2e}'.format(h_max)+',C_eps='+'{0:>2.1e}'.format(c_eps)+',C_CFL='+'{0:>2.1e}'.format(c_cfl)+').pdf'
                  },
     )
     
@@ -360,11 +362,11 @@ def graph_front_vel(interpolation=True, curvefit=False):
 #         data_hdf.read(theta,"C_CFL")
 #         c_cfl=theta.vector().norm('linf')
 
-#         data_hdf.read(theta,"h_min")
-#         h_min=theta.vector().norm('linf')
+#         data_hdf.read(theta,"h_max")
+#         h_max=theta.vector().norm('linf')
         
 #         fig.set_size_inches(mplt.set_size(345.,ratio=3*(5**.5-1)/8),forward=True)
-#         fig.savefig('./out/fig/'+str(DIM)+'d/temp_dist_(h_min='+'{0:>2.2e}'.format(h_min)+',C_eps='+'{0:>2.1e}'.format(c_eps)+'C_CFL='+'{0:>2.1e}'.format(c_cfl)+').pdf',
+#         fig.savefig('./out/fig/'+str(DIM)+'d/temp_dist_(h_max='+'{0:>2.2e}'.format(h_max)+',C_eps='+'{0:>2.1e}'.format(c_eps)+'C_CFL='+'{0:>2.1e}'.format(c_cfl)+').pdf',
 #                     format='pdf',
 #                     bbox_inches='tight',
 #                     transparent=False

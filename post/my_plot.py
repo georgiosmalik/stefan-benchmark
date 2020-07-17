@@ -1,8 +1,7 @@
 import matplotlib as mpl
-import matplotlib.pyplot as plt
-
 # necessary for plotting in Snehurka cluster:
-#matplotlib.use('Agg')
+#mpl.use('Agg')
+import matplotlib.pyplot as plt
 
 # Use 'ggplot' style
 plt.style.use('seaborn-whitegrid')
