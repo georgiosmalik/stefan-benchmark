@@ -84,10 +84,15 @@ NEWTON_PARAMS.add("maximum_iterations",25)
 
 # Specify data output
 GRAPH=False
-CONVERGENCE=False
 SAVE_DAT=False
 TEMP_TXT_DAT=False
 SAVE_FRONT_POS_TXT=True
+CONVERGENCE=False
+STABILITY=False
+
+# Data for stability testing:
+DATA_STABILITY={}
+
 # Temporal scheme for EHC model
 THETA=0.5
 #=====================================
@@ -230,7 +235,7 @@ def stefan_analytic_sol(dim, ploteq=False):
                                       degree=3)
 
         # 2d heat flux cpp code:
-        code_flux='-k*c_2d*2*exp(-r*r/(4*kappa*t))/r'
+        code_flux='-k*c_2d*exp(-r*r/(4*kappa*t))/r'
 
         # Heat influx:
         q_in=dolfin.Expression(code_flux, t=0.1, k=prm.k_l, c_2d=-prm.theta_0, r=prm.R1, kappa=prm.kappa_l, degree=0)
@@ -239,7 +244,7 @@ def stefan_analytic_sol(dim, ploteq=False):
         q_in=dolfin.Expression(code_flux, t=0.1, k=prm.k_l, c_2d=-prm.q_0/(2*np.pi*prm.k_l), r=prm.R1, kappa=prm.kappa_l, degree=0)
 
         # Heat outflux:
-        q_out=dolfin.Expression(code_flux, t=0.1, k=prm.k_s, c_2d=-(prm.theta_m-prm.theta_i)/expi(-lambda_**2/prm.kappa_s), r=prm.R2, kappa=prm.kappa_s, degree=0)
+        q_out=dolfin.Expression(code_flux, t=0.1, k=prm.k_s, c_2d=(-2)*(prm.theta_m-prm.theta_i)/expi(-lambda_**2/prm.kappa_s), r=prm.R2, kappa=prm.kappa_s, degree=0)
         return lambda_, theta_analytic, q_in, q_out
 
     def theta_sol_3d():
@@ -332,16 +337,16 @@ def stefan_analytic_sol(dim, ploteq=False):
                                                    degree=3)
 
         # 3d heat flux cpp code:
-        code_flux='-k*c_3d*(-4)*exp(-r*r/(4*kappa*t))*sqrt(kappa*t)/(r*r)'
+        code_flux='-k*c_3d*exp(-r*r/(4*kappa*t))*sqrt(4*kappa*t)/(r*r)'
 
         # Heat influx:
         q_in=dolfin.Expression(code_flux, t=0.1, k=prm.k_l, c_3d=prm.theta_0, r=prm.R1, kappa=prm.kappa_l, degree=0)
 
         # podle clanku:
-        q_in=dolfin.Expression(code_flux, t=0.1, k=prm.k_l, c_3d=prm.q_0/(16*np.pi*np.sqrt(prm.kappa_l)*prm.k_l), r=prm.R1, kappa=prm.kappa_l, degree=0)
+        q_in=dolfin.Expression(code_flux, t=0.1, k=prm.k_l, c_3d=-prm.q_0/(8*np.pi*prm.k_l*np.sqrt(prm.kappa_l)), r=prm.R1, kappa=prm.kappa_l, degree=0)
 
         # Heat outflux:
-        q_out=dolfin.Expression(code_flux, t=0.1, k=prm.k_s, c_3d=-(prm.theta_m-prm.theta_i)/((-2)*gamma(0.5)*gammaincc(0.5,lambda_**2/prm.kappa_s) + 2*np.sqrt(prm.kappa_s)/lambda_*np.exp(-lambda_**2/prm.kappa_s)), r=prm.R2, kappa=prm.kappa_s, degree=0)
+        q_out=dolfin.Expression(code_flux, t=0.1, k=prm.k_s, c_3d=-(prm.theta_i-prm.theta_m)/((-2)*gamma(0.5)*gammaincc(0.5,lambda_**2/prm.kappa_s) + 2*np.sqrt(prm.kappa_s)/lambda_*np.exp(-lambda_**2/prm.kappa_s)), r=prm.R2, kappa=prm.kappa_s, degree=0)
         
         return lambda_, theta_analytic, q_in, q_out
     
@@ -367,8 +372,12 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
 
         # Set timestep based on standart CFL condition:
 
-        global hmax
+        global hmin
         
+        hmin=dolfin.MPI.min(mesh.mpi_comm(),mesh.hmin())
+
+        global hmax
+
         hmax=dolfin.MPI.max(mesh.mpi_comm(),mesh.hmax())
 
         # Maximal velocity of melting front:
@@ -377,7 +386,7 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
         global dt
 
         # Timestep given by CFL:
-        dt=C_CFL*hmax/vmax
+        dt=C_CFL*hmin/vmax
 
         # Vytvor timeset pro simulaci:
         sim_timeset=np.arange(t_0,t_max,dt)
@@ -419,7 +428,7 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
     # Metoda na vypocet pozice fronty
     def stefan_front_position(theta):
         #vol_ice=dolfin.assemble(em.mollify(1,0,theta,x0=prm.theta_m,eps=dolfin.DOLFIN_EPS,deg='disC')*dx)
-        vol_ice=dolfin.assemble(em.mollify(1,0,theta-prm.theta_m,x0=0,eps=em.EPS,deg=em.DEG)*dx)
+        vol_ice=dolfin.assemble(em.mollify(1,0,theta-prm.theta_m,x0=0,eps=em.EPS,deg='C0')*dx)
         def front_pos_1d():
             return prm.R2-vol_ice
         def front_pos_2d():
@@ -624,14 +633,15 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
             data_hdf.write(dolfin.project(em.C_EPS,T),"C_eps")
             data_hdf.write(dolfin.project(C_CFL,T),"C_CFL")
             data_hdf.write(dolfin.project(hmax,T),"h_max")
+            data_hdf.write(dolfin.project(hmin,T),"h_min")
 
         data_py["disc_params"]["C_eps"]=em.C_EPS
         data_py["disc_params"]["C_CFL"]=C_CFL
         data_py["disc_params"]["h_max"]=hmax
+        data_py["disc_params"]["h_min"]=hmin
         data_py["disc_params"]["eps"]=float(em.EPS)
         data_py["disc_params"]["dt"]=dt
         data_py["disc_params"]["meshres"]=prm.meshres
-        
         
         index=0
         
@@ -814,6 +824,13 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                                              r'\numprint{'+'{0:>2.3e}'.format(errmethod[method][2])+'}'
                         ])
                         params=''
+
+        # Stability data:
+        if STABILITY and sim:
+            for method in sim:
+                front_position=data_py["front_pos"][method][-1]
+                err=abs(front_position-2*lambda_*np.sqrt(sim_timeset[-1]))/2*lambda_*np.sqrt(sim_timeset[-1])
+                DATA_STABILITY[str(em.C_EPS)][str(C_CFL)][method]=err
         #==========================================================
         if SAVE_DAT:
             data_hdf.close()
@@ -856,12 +873,22 @@ def stefan_convergence():
 
 # Stability benchmark:
 def stefan_stability():
-    step_size=[1e-4,5e-4,1e-3,5e-3,1e-2,5e-2]
-    time_step=[2.5e2,1.25e3,2.5e3,1.25e4,2.5e4,1.25e5]
-    for h in step_size:
-        for dt in time_step:
-            break
-    return None
+    prm.meshres=1000
+    global DATA_STABILITY
+    #DATA_STABILITY["meshres"]=prm.meshres
+    lower_bound = -2
+    upper_bound = 2
+    scale=np.arange(lower_bound,upper_bound+1)
+    for k_eps in scale:
+        em.C_EPS=2.**k_eps
+        DATA_STABILITY[str(em.C_EPS)]={}
+        for k_cfl in scale:
+            global C_CFL
+            C_CFL=2.**k_cfl
+            DATA_STABILITY[str(em.C_EPS)][str(C_CFL)]={}
+            stefan_benchmark()
+    # Save stability data for postprocessing:
+    np.save('./out/data/'+str(DIM)+'d/data_stability.npy', DATA_STABILITY)
 
 
 # Poznamka z 7.6.: bohuzel nelinearni formulace nekonverguje pro Cinf aproximace heavisida a diraca u cp_eff, pokud zvolis C1/Cinf pro HS/D pak to funguje, pro Cinf/Cinf haze nan pro reziduum, prozkoumej co se deje

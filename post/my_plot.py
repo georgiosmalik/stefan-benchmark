@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 # Use 'ggplot' style
 plt.style.use('seaborn-whitegrid')
 # Use LaTeX fonts
-#plt.style.use('tex')
+plt.style.use('tex')
 #-----------------
 # or equivalently (when 'tex' style sheet N/A):
 # tex_fonts = {
@@ -109,8 +109,15 @@ def graph1d(data,**figprm):
 
     # Set yticks:
     if "yticks" in figprm:
-        ax.set_yticks(figprm["yticks"][0])
-        ax.set_yticklabels(figprm["yticks"][1])
+        #ax.set_yticks(figprm["yticks"][0])
+        #ax.set_yticklabels(figprm["yticks"][1])
+        #plt.yticks(figprm["yticks"][0],figprm["yticks"][1],rotation='vertical', va='center')
+        plt.yticks(figprm["yticks"][0],rotation='vertical', va='center')
+
+    if "ylim" in figprm:
+        ax.set_ylim(bottom=figprm["ylim"].get("bottom",None),
+                    top=figprm["ylim"].get("top",None)
+        )
 
     # Set title
     ax.set_title(figprm.get("title",""))

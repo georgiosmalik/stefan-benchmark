@@ -39,24 +39,24 @@ if __name__ == "__main__":
         
     if "convergence" in sys.argv:
         # Run convergence:
-        sim.stefan_benchmark.GRAPH=False
-        sim.stefan_benchmark.SAVE_DAT=False
         sim.stefan_benchmark.CONVERGENCE=True
         sim.stefan_benchmark.stefan_convergence()
         
     elif "stability" in sys.argv:
         # Run stability:
-        sim.stefan_benchmark.GRAPH=False
-        sim.stefan_benchmark.SAVE_DAT=False
-        sim.stefan_benchmark.CONVERGENCE=False
+        sim.stefan_benchmark.STABILITY=True
         sim.stefan_benchmark.stefan_stability()
         
     elif "postprocessing" in sys.argv:
-        # Run postprocessing:
+        # Run postprocessing (benchmark data):
         sim.stefan_benchmark.splt.load_data()
         sim.stefan_benchmark.splt.graph_temp()
         sim.stefan_benchmark.splt.graph_front_pos()
         sim.stefan_benchmark.splt.graph_front_vel()
+
+        # Run postprocessing (stability data):
+        # sim.stefan_benchmark.splt.load_data_stability()
+        # sim.stefan_benchmark.splt.graph_stability()
 
     elif "preprocessing" in sys.argv:
         # Build mesh (only 3d):
@@ -71,7 +71,6 @@ if __name__ == "__main__":
         # Run simulation:
         sim.stefan_benchmark.GRAPH=False
         sim.stefan_benchmark.SAVE_DAT=True
-        sim.stefan_benchmark.CONVERGENCE=False
         sim.stefan_benchmark.stefan_benchmark()
         
     # Pokyny k pousteni:

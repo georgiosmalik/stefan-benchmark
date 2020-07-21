@@ -168,7 +168,6 @@ def set_eps(mesh,theta):
     hmax=dolfin.MPI.max(mesh.mpi_comm(),mesh.hmax())
     theta_norm=dolfin.project(dolfin.sqrt(dolfin.inner(dolfin.grad(theta),dolfin.grad(theta))),theta.function_space())
     theta_grad_max=theta_norm.vector().norm('linf')
-    print(theta_grad_max)
     global EPS
     EPS.assign(hmax*theta_grad_max/C_EPS)
 # #---------------------------------

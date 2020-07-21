@@ -10,6 +10,7 @@ import post.my_plot as mplt
 
 from matplotlib.legend_handler import HandlerLine2D, HandlerTuple
 from matplotlib.lines import Line2D
+from mpl_toolkits.mplot3d import Axes3D
 from scipy.interpolate import UnivariateSpline
 from scipy.optimize import curve_fit
 from scipy.interpolate import CubicSpline
@@ -33,6 +34,10 @@ linestyle={"analytic":{"color":mplt.mypalette[0],
 def load_data():
     global DATA_PY
     DATA_PY=np.load('./out/data/'+str(DIM)+'d/data.npy',allow_pickle='TRUE').item()
+
+def load_data_stability():
+    global DATA_STABILITY
+    DATA_STABILITY=np.load('./out/data/'+str(DIM)+'d/data_stability.npy',allow_pickle='TRUE').item()
 
 def graph_temp():
 
@@ -185,6 +190,7 @@ def graph_front_pos(offset=False,ls=False):
                  axlabels=["",r"$s(t)$"],
                  xticks=[[timeset[0],timeset[-1]],[r"$t_0$",r"$t_{\mathrm{max}}$"]],
                  yticks=[[],[]],
+                 ylim={"bottom":0.},
                  savefig={"width":345./2,"name":'./out/fig/'+str(DIM)+'d/front_pos_(h_max='+'{0:>2.2e}'.format(h_max)+',C_eps='+'{0:>2.1e}'.format(c_eps)+',C_CFL='+'{0:>2.1e}'.format(c_cfl)+').pdf'},)
 
 def graph_front_vel(interpolation=True, curvefit=False):
@@ -205,7 +211,6 @@ def graph_front_vel(interpolation=True, curvefit=False):
     def f(x,a,b):
         return a/np.sqrt(x)+b
 
-
     # Interpolation
     if interpolation:
         for method in methods:
@@ -216,7 +221,7 @@ def graph_front_vel(interpolation=True, curvefit=False):
             vel_spline = pos_spline(timeset,1)
             vel_spline=pos_spline.derivative()
         
-            plot_data.append([timeset[1:],vel_spline(timeset[1:])])
+            plot_data.append([timeset,vel_spline(timeset)])
             legend.append(method)
     # Curve fitting:
     elif curvefit:
@@ -246,10 +251,50 @@ def graph_front_vel(interpolation=True, curvefit=False):
                  axlabels=["",r"$\mathbf{\nu}_{\sigma}(t)$"],
                  xticks=[[timeset[0],timeset[-1]],[r"$t_0$",r"$t_{\mathrm{max}}$"]],
                  yticks=[[],[]],
+                 ylim={"bottom":0.},
                  savefig={"width":345./2,
                           "name":'./out/fig/'+str(DIM)+'d/front_vel_(h_max='+'{0:>2.2e}'.format(h_max)+',C_eps='+'{0:>2.1e}'.format(c_eps)+',C_CFL='+'{0:>2.1e}'.format(c_cfl)+').pdf'
                  },
     )
+
+def graph_stability():
+
+    data=DATA_STABILITY
+    
+    X=np.log2(list(map(float,list(data.keys()))))
+    Y=np.log2(list(map(float,list(data[str(2**X[0])].keys()))))
+
+    methods=list(data[str(2**X[0])][str(2**X[0])].keys())
+
+    X, Y = np.meshgrid(X,Y)
+    Z = {}
+    for method in methods:
+        Z[method]=[]
+        for x in X[0,:]:
+            line=[]
+            for y in Y[:,0]:
+                line.append(data[str(2.**x)][str(2.**y)][method])
+                print(method+', C_eps='+str(2.**x)+', C_CFL='+str(2.**y)+', err='+str(data[str(2.**x)][str(2.**y)][method]))
+            Z[method].append(line)
+        Z[method]=np.asarray(Z[method])
+            
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
+        ax.invert_xaxis()
+
+        ax.set_xlabel(r"$\log_2(C_\epsilon)$")
+        ax.set_ylabel(r"$\log_2(C_{\mathrm{CFL}})$")
+
+        ax.plot_surface(X,Y,Z[method], linewidth=0, alpha = 0.8)
+
+        ax.view_init(elev=45., azim=-45.)
+
+        fig.set_size_inches(mplt.set_size(345.,ratio=3*(5**.5-1)/8),forward=True)
+        fig.savefig('./out/fig/'+str(DIM)+'d/stability_'+method+'.pdf',
+                    format='pdf',
+                    bbox_inches='tight',
+                    transparent=False
+        )
     
 #----------------------------------
 # Backup (HDF file postprocessing):

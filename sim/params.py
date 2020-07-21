@@ -33,13 +33,12 @@ g = 9.81                  # Gravitational acceleration
 # 2d,3d
 R1 = 0.1
 R2 = 1.
-meshres = 20
+meshres = {1:1000,2:100,3:0.05}
 # Physical:
-q_0=100                           # heat flux from source in origin
+q_0 = 2e5                           # source heat flux in origin (value for 1d)
 theta_0 = 373.                      # heating temperature for 1D
-theta_0_3D = 5.                     # heating power for 3D
 theta_m = 273.                      # melting temperature
-theta_i = 263.                    # initial temperature
+theta_i = 263.                      # initial temperature
 delta_theta = theta_0 - theta_m     # temperature difference
 K = 1.                              # boundary heat flow for Stefan 2D
 theta_left = 283.                   # Heating temperature [K]
