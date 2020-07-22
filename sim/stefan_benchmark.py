@@ -72,7 +72,7 @@ R_START=0.4
 R_END=0.65
 
 # CFL condition constant
-C_CFL=1.
+C_CFL=.1
 
 # Mollification constant
 em.C_EPS=1.
@@ -339,14 +339,14 @@ def stefan_analytic_sol(dim, ploteq=False):
         # 3d heat flux cpp code:
         code_flux='-k*c_3d*exp(-r*r/(4*kappa*t))*sqrt(4*kappa*t)/(r*r)'
 
-        # Heat influx:
-        q_in=dolfin.Expression(code_flux, t=0.1, k=prm.k_l, c_3d=prm.theta_0, r=prm.R1, kappa=prm.kappa_l, degree=0)
-
-        # podle clanku:
+        # Heat influx (updated):
         q_in=dolfin.Expression(code_flux, t=0.1, k=prm.k_l, c_3d=-prm.q_0/(8*np.pi*prm.k_l*np.sqrt(prm.kappa_l)), r=prm.R1, kappa=prm.kappa_l, degree=0)
 
         # Heat outflux:
-        q_out=dolfin.Expression(code_flux, t=0.1, k=prm.k_s, c_3d=-(prm.theta_i-prm.theta_m)/((-2)*gamma(0.5)*gammaincc(0.5,lambda_**2/prm.kappa_s) + 2*np.sqrt(prm.kappa_s)/lambda_*np.exp(-lambda_**2/prm.kappa_s)), r=prm.R2, kappa=prm.kappa_s, degree=0)
+        q_out=dolfin.Expression(code_flux, t=0.1, k=prm.k_s, c_3d=-(prm.theta_i-prm.theta_m)/((-1)*gamma(0.5)*gammaincc(0.5,lambda_**2/prm.kappa_s) + np.sqrt(prm.kappa_s)/lambda_*np.exp(-lambda_**2/prm.kappa_s)), r=prm.R2, kappa=prm.kappa_s, degree=0)
+        # print(((-2)*gamma(0.5)*gammaincc(0.5,lambda_**2/prm.kappa_s) + 2*np.sqrt(prm.kappa_s)/lambda_*np.exp(-lambda_**2/prm.kappa_s)))
+        # print(np.sqrt(prm.kappa_s)/lambda_*np.exp(-lambda_**2/prm.kappa_s) - np.sqrt(np.pi)*erfc(lambda_/np.sqrt(prm.kappa_s)))
+        # exit()
         
         return lambda_, theta_analytic, q_in, q_out
     
@@ -624,7 +624,22 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
             file_front_pos.write('- ---------- ----- -----\n')
         #--------------------------------------
         # Set epsilon (mollifying parameter)
-        em.set_eps(mesh,dolfin.project(theta_analytic,T))
+        # Various types of Linf temp grad bound:
+        # 1. analytic:
+        def kappa_d(n):
+            return n*np.pi**(n/2)/gamma(n/2+1)
+        theta_grad_max_analytic=(prm.q_0*2**(1-DIM)/(prm.k_l*kappa_d(DIM)))*(lambda_**(1-DIM))*np.exp(-lambda_**2/prm.kappa_l)/np.sqrt(sim_timeset[0])
+        # 2. local:
+        theta = dolfin.project(theta_analytic,T)
+        char = dolfin.conditional(abs(theta-prm.theta_m)<1.,1.,0.)
+        theta_norm=dolfin.project(char*dolfin.sqrt(dolfin.inner(dolfin.grad(theta),dolfin.grad(theta))),T)
+        theta_grad_max_local=theta_norm.vector().norm('linf')
+
+        # 3. global:
+        theta_norm=dolfin.project(dolfin.sqrt(dolfin.inner(dolfin.grad(theta),dolfin.grad(theta))),theta.function_space())
+        theta_grad_max_global=theta_norm.vector().norm('linf')
+
+        em.set_eps(hmax,theta_grad_max_local)
 
         print('dt='+str(dt)+', eps='+str(float(em.EPS))+', h_max='+str(hmax)+', lambda='+str(lambda_)+', q_0='+str(prm.q_0))
 

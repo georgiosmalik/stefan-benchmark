@@ -164,10 +164,10 @@ def dirac(xvalue, x, x0=0.0, eps=EPS, deg=DEG):
     """Return dirac with L1 norm of xvalue."""
     return xvalue*df(x,x0,eps,deg)()
 
-def set_eps(mesh,theta):
-    hmax=dolfin.MPI.max(mesh.mpi_comm(),mesh.hmax())
-    theta_norm=dolfin.project(dolfin.sqrt(dolfin.inner(dolfin.grad(theta),dolfin.grad(theta))),theta.function_space())
-    theta_grad_max=theta_norm.vector().norm('linf')
+def set_eps(hmax,theta_grad_max):
+    # hmax=dolfin.MPI.max(mesh.mpi_comm(),mesh.hmax())
+    # theta_norm=dolfin.project(dolfin.sqrt(dolfin.inner(dolfin.grad(theta),dolfin.grad(theta))),theta.function_space())
+    # theta_grad_max=theta_norm.vector().norm('linf')
     global EPS
     EPS.assign(hmax*theta_grad_max/C_EPS)
 # #---------------------------------
