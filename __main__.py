@@ -11,6 +11,7 @@
 
 import os
 import sys
+import time
 
 import sim.stefan_benchmark
 
@@ -69,7 +70,10 @@ if __name__ == "__main__":
         # Run simulation:
         sim.stefan_benchmark.GRAPH=False
         sim.stefan_benchmark.SAVE_DAT=True
+        solvestart = time.time()
         sim.stefan_benchmark.stefan_benchmark()
+        solveend = time.time()
+        print("time:", solveend-solvestart)
         
     # Pokyny k pousteni:
     # pustit prikazem python3 stefan-benchmark 1d z nadrazene slozky

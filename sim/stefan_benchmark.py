@@ -473,7 +473,7 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                 (T,bcs,theta,_theta,theta_)=stefan_function_spaces()
                 
                 # Nastav poc. podminku:
-                theta_k=dolfin.project(theta_analytic,T)
+                theta_k=dolfin.project(theta_analytic,T,solver_type="cg",preconditioner_type="hypre_amg")
 
                 q_form, bc_form=stefan_boundary_values(theta_,bcs)
 
@@ -484,7 +484,10 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
 
                     problem = dolfin.NonlinearVariationalProblem(F,theta,bcs=bc_form,J=dolfin.derivative(F,theta))
                     solver = dolfin.NonlinearVariationalSolver(problem)
-                    solver.parameters["newton_solver"]=NEWTON_PARAMS
+                    #solver.parameters["newton_solver"]=NEWTON_PARAMS
+                    solver.parameters["nonlinear_solver"]="newton"
+                    solver.parameters["newton_solver"]["linear_solver"]="bicgstab"
+                    
 
                     return solver, theta, theta_k
                     
@@ -502,7 +505,7 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                 (T,bcs,theta,_theta,theta_)=stefan_function_spaces()
                 
                 # Nastav poc. podminku:
-                theta_k=dolfin.project(theta_analytic,T)
+                theta_k=dolfin.project(theta_analytic,T,solver_type="cg",preconditioner_type="hypre_amg")
 
                 q_form, bc_form=stefan_boundary_values(theta_,bcs)
 
@@ -513,8 +516,27 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
 
                     problem = dolfin.NonlinearVariationalProblem(F,theta,bcs=bc_form,J=dolfin.derivative(F,theta))
                     solver = dolfin.NonlinearVariationalSolver(problem)
-                    solver.parameters["newton_solver"]=NEWTON_PARAMS
+                    #solver.parameters["newton_solver"]=NEWTON_PARAMS
+                    solver.parameters["nonlinear_solver"]="newton"
+                    solver.parameters["newton_solver"]["linear_solver"]="bicgstab"
+                    #solver.parameters["newton_solver"]["linear_solver"]="mumps"
+                    #solver.parameters["newton_solver"]["linear_solver"]="cg" 
+                    #solver.parameters["newton_solver"]["preconditioner"]="hypre_amg"
+                    
+                    
+                    #solver.parameters["newton_solver"]['linear_solver'] = dolfin.Parameters("CG")
+                    dolfin.info(solver.parameters, True)
+                    #exit()
+                    #dolfin.info(solver.parameters["newton_solver"], True)
+                    #solver.parameters["krylov_solver"]="CG"
+                    #solver.parameters["newton_solver"]["linear_solver"]=dolfin.Parameters("CG")
+                    #solver.parameters['snes_solver']['linear_solver']= "cg"
+                    #solver.parameters['snes_solver']['preconditioner'] = "hypre_amg"
+                    #exit()
 
+                    
+
+               
                     return solver, theta, theta_k    
 
                 F = k_eff(theta_k,deg='C0')*dolfin.inner(dolfin.grad(_theta), dolfin.grad(theta_))*dx+prm.rho*c_p_eff(theta_k,deg='disC')/dt*(dolfin.inner(_theta, theta_) - dolfin.inner(theta_k, theta_))*dx - sum(q_form)
@@ -531,7 +553,7 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                 (T,bcs,theta,_theta,theta_)=stefan_function_spaces()
                 
                 # Nastav poc. podminku:
-                theta_k=dolfin.project(theta_analytic,T)
+                theta_k=dolfin.project(theta_analytic,T,solver_type="cg",preconditioner_type="hypre_amg")
 
                 # Nastav okrajove cleny:
                 q_form, bc_form=stefan_boundary_values(theta_,bcs)
@@ -545,8 +567,13 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                 
                 problem = dolfin.NonlinearVariationalProblem(F,theta,bcs=bc_form,J=dolfin.derivative(F,theta))
                 solver = dolfin.NonlinearVariationalSolver(problem)
-                solver.parameters["newton_solver"]=NEWTON_PARAMS
-                
+                #solver.parameters["newton_solver"]=NEWTON_PARAMS
+                solver.parameters["nonlinear_solver"]="newton"
+                solver.parameters["newton_solver"]["linear_solver"]="bicgstab"    
+                #solver.parameters["newton_solver"]["linear_solver"]="mumps" 
+                #solver.parameters["newton_solver"]["linear_solver"]="cg"
+                #solver.parameters["newton_solver"]["preconditioner"]="hypre_amg"
+                    
                 return solver, theta, theta_k
             
             methodswitch = {
@@ -630,9 +657,9 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
             return n*np.pi**(n/2)/gamma(n/2+1)
         theta_grad_max_analytic=(prm.q_0*2**(1-DIM)/(prm.k_l*kappa_d(DIM)))*(lambda_**(1-DIM))*np.exp(-lambda_**2/prm.kappa_l)/np.sqrt(sim_timeset[0])
         # 2. local:
-        theta = dolfin.project(theta_analytic,T)
+        theta = dolfin.project(theta_analytic,T,solver_type="cg",preconditioner_type="hypre_amg")
         char = dolfin.conditional(abs(theta-prm.theta_m)<1.,1.,0.)
-        theta_norm=dolfin.project(char*dolfin.sqrt(dolfin.inner(dolfin.grad(theta),dolfin.grad(theta))),T)
+        theta_norm=dolfin.project(char*dolfin.sqrt(dolfin.inner(dolfin.grad(theta),dolfin.grad(theta))),T,solver_type="cg",preconditioner_type="hypre_amg")
         theta_grad_max_local=theta_norm.vector().norm('linf')
 
         # 3. global:
@@ -645,10 +672,10 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
 
         # Save discretization parameters:
         if SAVE_DAT:
-            data_hdf.write(dolfin.project(em.C_EPS,T),"C_eps")
-            data_hdf.write(dolfin.project(C_CFL,T),"C_CFL")
-            data_hdf.write(dolfin.project(hmax,T),"h_max")
-            data_hdf.write(dolfin.project(hmin,T),"h_min")
+            data_hdf.write(dolfin.project(em.C_EPS,T,solver_type="cg",preconditioner_type="hypre_amg"),"C_eps")
+            data_hdf.write(dolfin.project(C_CFL,T,solver_type="cg",preconditioner_type="hypre_amg"),"C_CFL")
+            data_hdf.write(dolfin.project(hmax,T,solver_type="cg",preconditioner_type="hypre_amg"),"h_max")
+            data_hdf.write(dolfin.project(hmin,T,solver_type="cg",preconditioner_type="hypre_amg"),"h_min")
 
         data_py["disc_params"]["C_eps"]=em.C_EPS
         data_py["disc_params"]["C_CFL"]=C_CFL
@@ -717,7 +744,7 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
             if SAVE_DAT and (t in dat_timeset):
 
                 # Save projection of analytic solution:
-                theta_analytic_proj=dolfin.project(theta_analytic,T)
+                theta_analytic_proj=dolfin.project(theta_analytic,T,solver_type="cg",preconditioner_type="hypre_amg")
                 theta_analytic_proj.rename("Temperature analytic","theta_analytic")
 
                 data_hdf.write(theta_analytic_proj,"theta_analytic",t)
@@ -810,7 +837,7 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
         
         # Convergence data:
         if CONVERGENCE and sim:
-            theta_analytic_proj=dolfin.project(theta_analytic,sim[method][1].function_space())
+            theta_analytic_proj=dolfin.project(theta_analytic,sim[method][1].function_space(),solver_type="cg",preconditioner_type="hypre_amg")
             errmethod={}
             for method in sim:
                 front_position=data_py["front_pos"][method][-1]
