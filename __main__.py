@@ -63,6 +63,14 @@ if __name__ == "__main__":
         sim.stefan_benchmark.smsh.BUILD_MESH_HDF=True
         sim.stefan_benchmark.smsh.stefan_mesh(3)()
 
+    # TEST (tuning 3d benchmark)
+    elif "projection" in sys.argv:
+        # Run projected simulation:
+        sim.stefan_benchmark.GRAPH=True
+        sim.stefan_benchmark.SAVE_DAT=False
+        sim.stefan_benchmark.stefan_projection()
+    #---------------------------
+
     else:
         # nize se nastavuji konstanty ktere ovlivnuji vypocet (prvni souvisi s casovym krokem, druhe s sirkou mushy regionu, treti s prostorovou diskretizace, ta treti ted koresponduje s 1d variantou, zbyle jsou univerzalni)
 
