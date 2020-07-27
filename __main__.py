@@ -67,6 +67,7 @@ if __name__ == "__main__":
     # TEST (tuning 3d benchmark)
     elif "projection" in sys.argv:
         # Run projected simulation:
+        sim.stefan_benchmark.PROJECT=True
         sim.stefan_benchmark.GRAPH=True
         sim.stefan_benchmark.SAVE_DAT=False
         sim.stefan_benchmark.stefan_projection()
