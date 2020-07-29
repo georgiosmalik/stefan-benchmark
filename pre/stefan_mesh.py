@@ -14,6 +14,7 @@ import sim.params as prm
 BUILD_MESH_HDF=False
 
 def stefan_mesh(dim):
+    
     def stefan_mesh_1d():
         
         return msh.mesh1d(prm.R1,prm.R2,prm.meshres[1])
@@ -31,7 +32,8 @@ def stefan_mesh(dim):
             subprocess.call(['sed','-i',"/Characteristic Length {6, 5, 4, 2, 3, 1} = .*;/c\Characteristic Length {6, 5, 4, 2, 3, 1} = "+str(prm.meshres[3])+";",'./pre/gmsh_mesh/sphere.geo'])
         
             subprocess.call('./pre/gmsh_mesh/generate_mesh.sh')
-            msh.meshxml("./pre/gmsh_mesh/sphere")
+            
+            return msh.meshxml("./pre/gmsh_mesh/sphere")
 
         return msh.meshhdf("./pre/gmsh_mesh/sphere")
     

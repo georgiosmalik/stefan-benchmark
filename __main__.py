@@ -76,6 +76,10 @@ if __name__ == "__main__":
     else:
         # nize se nastavuji konstanty ktere ovlivnuji vypocet (prvni souvisi s casovym krokem, druhe s sirkou mushy regionu, treti s prostorovou diskretizace, ta treti ted koresponduje s 1d variantou, zbyle jsou univerzalni)
 
+        # Set start and end of the simulation:
+        sim.stefan_benchmark.R_START=sim.stefan_benchmark.prm.R1+0.2
+        sim.stefan_benchmark.R_END=sim.stefan_benchmark.prm.R2-0.2
+        
         # Run simulation:
         sim.stefan_benchmark.GRAPH=False
         sim.stefan_benchmark.SAVE_DAT=True

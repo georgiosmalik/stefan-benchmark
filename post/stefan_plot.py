@@ -110,9 +110,9 @@ def graph_temp():
     second_legend=plt.legend(handles=second_legend_elems,loc="upper right", frameon=True, fancybox=False, borderaxespad=0.)
     ax2 = plt.gca().add_artist(second_legend)
     if methodplots:
-        ax.legend(plots,names,loc="upper right", bbox_to_anchor=(0.78,1.),handler_map={tuple: HandlerTuple(ndivide=len(methodplots))}, frameon=True, fancybox=False, borderaxespad=0.)
+        ax.legend(plots,names,loc="upper right", bbox_to_anchor=(0.7815,1.),handler_map={tuple: HandlerTuple(ndivide=len(methodplots))}, frameon=True, fancybox=False, borderaxespad=0.)
     else:
-        ax.legend(names,loc="upper right", bbox_to_anchor=(0.78,1.), frameon=True, fancybox=False, borderaxespad=0.)
+        ax.legend(names,loc="upper right", bbox_to_anchor=(0.7815,1.), frameon=True, fancybox=False, borderaxespad=0.)
 
     # Make custom ticks:
     ax.set_xticks(xticks[0])

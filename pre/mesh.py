@@ -50,7 +50,7 @@ def mesh2d(inner,outer,*meshres,stefan=True):
         # Definition of measures and normal vector:
         n = dolfin.FacetNormal(mesh)
         dx = dolfin.Measure("dx", mesh)
-        ds = dolfin.Measure("ds", subdomain_data = boundary[0])
+        ds = dolfin.Measure("ds", domain=mesh, subdomain_data = boundary[0])
     else:
         width = inner
         height = outer
@@ -124,6 +124,7 @@ def meshxml(name): # reads mesh from .xml file, cf. Notes
         boundary = (dolfin.MeshFunction("size_t",mesh,name+"_facet_region.xml"),{'inner':1,'outer':2})
         #mesh.init()
         hdf.write(boundary[0], "/boundary")
+        
         ds = dolfin.Measure("ds", subdomain_data = boundary[0])
     else:
         boundary = (dolfin.MeshFunction("size_t", mesh, mesh.topology().dim()-1,0),{})
@@ -153,14 +154,20 @@ def meshxml(name): # reads mesh from .xml file, cf. Notes
 #-------------------------
 # mesh from hdf file:
 def meshhdf(name):
+    
     mesh = dolfin.Mesh()
+    
     hdf = dolfin.HDF5File(mesh.mpi_comm(),name+"_hdf.h5","r")
     hdf.read(mesh,"/mesh",False)
+    
     boundary = (dolfin.MeshFunction('size_t',mesh,mesh.topology().dim()-1,0),{'inner':1,'outer':2})
     hdf.read(boundary[0],"/boundary")
+    hdf.close()
+    
     n = dolfin.FacetNormal(mesh)
-    dx = dolfin.Measure("dx", mesh)
-    ds = dolfin.Measure("ds", subdomain_data = boundary[0])
+    dx = dolfin.Measure("dx", domain=mesh)
+    ds = dolfin.Measure("ds", domain=mesh, subdomain_data = boundary[0])
+    
     return (mesh,boundary,n,dx,ds)
 #=========================
 

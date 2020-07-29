@@ -69,7 +69,7 @@ DEGREE=1
 
 # Starting and ending radius of simulation
 R_START=0.4
-R_END=0.65
+R_END=0.6
 
 # CFL condition constant
 C_CFL=1.
@@ -79,6 +79,7 @@ em.C_EPS=1.
 
 # Nonlinear solver parameters
 NEWTON_PARAMS=dolfin.Parameters("newton_solver")
+NEWTON_PARAMS.add("linear_solver","bicgstab")
 NEWTON_PARAMS.add("absolute_tolerance",1e-5)
 NEWTON_PARAMS.add("maximum_iterations",25)
 
@@ -134,7 +135,7 @@ def stefan_analytic_sol(dim, ploteq=False):
         # podle clanku:
         code_analytic="""x[0] < 2*lambda_*sqrt(t) ? q_0*sqrt(kappa_l*pi)/k_l*(erf(lambda_/sqrt(kappa_l))-erf(x[0]/(2*sqrt(kappa_l*t))))+theta_m : theta_i + (theta_m - theta_i)/erfc(lambda_/sqrt(kappa_s))*erfc(x[0]/(2*sqrt(t*kappa_s)))"""
         
-        theta_analytic=dolfin.Expression(code_analytic,lambda_=lambda_, t=0.1, q_0=prm.q_0, theta_m=prm.theta_m, theta_0=prm.theta_0, theta_i=prm.theta_i, k_l=prm.k_l, kappa_l=prm.kappa_l, kappa_s=prm.kappa_s, degree=3)
+        theta_analytic = dolfin.Expression(code_analytic,lambda_=lambda_, t=0.1, q_0=prm.q_0, theta_m=prm.theta_m, theta_0=prm.theta_0, theta_i=prm.theta_i, k_l=prm.k_l, kappa_l=prm.kappa_l, kappa_s=prm.kappa_s, degree=3)
 
         # cpp code heat flux:
         code_flux='-k*C1*exp(-r*r/(4*t*kappa))/sqrt(t)'
@@ -484,6 +485,7 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
     def stefan_front_position(theta):
         #vol_ice=dolfin.assemble(em.mollify(1,0,theta,x0=prm.theta_m,eps=dolfin.DOLFIN_EPS,deg='disC')*dx)
         vol_ice=dolfin.assemble(em.mollify(1,0,theta-prm.theta_m,x0=0,eps=em.EPS,deg='C0')*dx)
+        
         def front_pos_1d():
             return prm.R2-vol_ice
         def front_pos_2d():
@@ -524,6 +526,7 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                 # Vrat okrajove cleny v zavislosti na formulaci
                 formulation={"DN":0,"ND":1,"NN":2,"DD":0.5}
                 i=formulation[BOUNDARY_FORMULATION]
+                
                 q_form = [q_out*theta_test*ds(2),q_in*theta_test*ds(1)][floor(-1.5+i):ceil(0.5+i)]
 
                 # TEST (tuning 3d benchmark)
@@ -560,10 +563,7 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
 
                     problem = dolfin.NonlinearVariationalProblem(F,theta,bcs=bc_form,J=dolfin.derivative(F,theta))
                     solver = dolfin.NonlinearVariationalSolver(problem)
-                    #solver.parameters["newton_solver"]=NEWTON_PARAMS
-                    solver.parameters["nonlinear_solver"]="newton"
-                    solver.parameters["newton_solver"]["linear_solver"]="bicgstab"
-                    
+                    solver.parameters["newton_solver"]=NEWTON_PARAMS
 
                     return solver, theta, theta_k
                     
@@ -598,16 +598,18 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
 
                     problem = dolfin.NonlinearVariationalProblem(F,theta,bcs=bc_form,J=dolfin.derivative(F,theta))
                     solver = dolfin.NonlinearVariationalSolver(problem)
-                    #solver.parameters["newton_solver"]=NEWTON_PARAMS
-                    solver.parameters["nonlinear_solver"]="newton"
-                    solver.parameters["newton_solver"]["linear_solver"]="bicgstab"
+                    solver.parameters["newton_solver"]=NEWTON_PARAMS
+                    # solver.parameters["nonlinear_solver"]="newton"
+                    # solver.parameters["newton_solver"]["linear_solver"]="bicgstab"
+                    # solver.parameters["newton_solver"]["absolute_tolerance"]=1e-5
+                    # solver.parameters["newton_solver"]["maximum_iterations"]=25
                     #solver.parameters["newton_solver"]["linear_solver"]="mumps"
                     #solver.parameters["newton_solver"]["linear_solver"]="cg" 
                     #solver.parameters["newton_solver"]["preconditioner"]="hypre_amg"
                     
                     
                     #solver.parameters["newton_solver"]['linear_solver'] = dolfin.Parameters("CG")
-                    dolfin.info(solver.parameters, True)
+                    #dolfin.info(solver.parameters, True)
                     #exit()
                     #dolfin.info(solver.parameters["newton_solver"], True)
                     #solver.parameters["krylov_solver"]="CG"
@@ -652,21 +654,10 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                     jr = dolfin.Expression("x[0]*x[0]",domain = mesh,degree=3)
                     F=k_eff(theta,deg='C0')*dolfin.inner(dolfin.grad(theta),dolfin.grad(theta_))*jr*dx+prm.rho/dt*(c_p_eff(theta,deg='disC')*(theta-prm.theta_m)+s(theta)-c_p_eff(theta_k,deg='disC')*(theta_k-prm.theta_m)-s(theta_k))*theta_*jr*dx-sum(q_form)
                 #----------------------------
-
-                # # test
-                # print((dolfin.assemble(dolfin.Constant(1)*dx)-np.pi*(prm.R2**2-prm.R1**2))/(np.pi*(prm.R2**2-prm.R1**2)))
-                # print(dolfin.assemble(1*ds(2), exterior_facet_domains=boundary))
-                # exit()
-                #-----
                 
                 problem = dolfin.NonlinearVariationalProblem(F,theta,bcs=bc_form,J=dolfin.derivative(F,theta))
                 solver = dolfin.NonlinearVariationalSolver(problem)
-                #solver.parameters["newton_solver"]=NEWTON_PARAMS
-                solver.parameters["nonlinear_solver"]="newton"
-                solver.parameters["newton_solver"]["linear_solver"]="bicgstab"    
-                #solver.parameters["newton_solver"]["linear_solver"]="mumps" 
-                #solver.parameters["newton_solver"]["linear_solver"]="cg"
-                #solver.parameters["newton_solver"]["preconditioner"]="hypre_amg"
+                solver.parameters["newton_solver"]=NEWTON_PARAMS
                     
                 return solver, theta, theta_k
             
