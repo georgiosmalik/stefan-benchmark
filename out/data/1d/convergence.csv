@@ -1,0 +1,7 @@
+params,method,l2norm,linfnorm,deltas
+\makecell{$h$=\numprint{1e-2}, $\epsilon$=\numprint{5.e-1} \\ ($\Delta t$=\numprint{1.e+4})},EHC,\numprint{6.98e-4},\numprint{1.08e-3},\numprint{1.13e-3}
+,TTM,\numprint{2.07e-3},\numprint{2.07e-3},\numprint{1.95e-3}
+\makecell{$h$=\numprint{1.e-3}, $\epsilon$=\numprint{5.e-2} \\ ($\Delta t$=\numprint{1.e+3})},EHC,\numprint{1.59e-3},\numprint{2.18e-3},\numprint{7.65e-4}
+,TTM,\numprint{1.43e-4},\numprint{2.18e-4},\numprint{1.43e-4}
+\makecell{$h$=\numprint{1.e-4}, $\epsilon$=\numprint{5.e-3} \\ ($\Delta t$=\numprint{1.e+2})},EHC,\numprint{1.71e-3},\numprint{2.28e-3},\numprint{9.48e-4}
+,TTM,\numprint{7.87e-5},\numprint{1.18e-4},\numprint{3.65e-5}
