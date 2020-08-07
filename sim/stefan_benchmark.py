@@ -70,13 +70,13 @@ DEGREE=1
 
 # Starting and ending radius of simulation
 R_START=0.4
-R_END=0.6
+R_END=0.65
 
 # CFL condition constant
-C_CFL=1.
+C_CFL=0.8
 
 # Mollification constant
-em.C_EPS=1.
+em.C_EPS=2.5
 
 # Nonlinear solver parameters
 NEWTON_PARAMS=dolfin.Parameters("newton_solver")
@@ -89,6 +89,9 @@ GRAPH=False
 SAVE_DAT=False
 TEMP_TXT_DAT=False
 SAVE_FRONT_POS_TXT=True
+
+# Types of simulation
+BENCHMARK=False
 CONVERGENCE=False
 STABILITY=False
 
@@ -362,9 +365,6 @@ def stefan_analytic_sol(dim, ploteq=False):
 
         # Heat outflux:
         q_out=dolfin.Expression(code_flux, t=0.1, k=prm.k_s, c_3d=-(prm.theta_i-prm.theta_m)/((-1)*gamma(0.5)*gammaincc(0.5,lambda_**2/prm.kappa_s) + np.sqrt(prm.kappa_s)/lambda_*np.exp(-lambda_**2/prm.kappa_s)), r=prm.R2, kappa=prm.kappa_s, degree=0)
-        # print(((-2)*gamma(0.5)*gammaincc(0.5,lambda_**2/prm.kappa_s) + 2*np.sqrt(prm.kappa_s)/lambda_*np.exp(-lambda_**2/prm.kappa_s)))
-        # print(np.sqrt(prm.kappa_s)/lambda_*np.exp(-lambda_**2/prm.kappa_s) - np.sqrt(np.pi)*erfc(lambda_/np.sqrt(prm.kappa_s)))
-        # exit()
         
         return lambda_, theta_analytic, q_in, q_out
     
@@ -380,6 +380,8 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
     # MPI objects:
     comm=dolfin.MPI.comm_world
     bbox=mesh.bounding_box_tree()
+
+    global rank
     rank=dolfin.MPI.rank(mesh.mpi_comm())
     
     def stefan_loop_timesets():
@@ -400,11 +402,15 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
 
         # Maximal velocity of melting front:
         vmax=lambda_/np.sqrt(t_0)
-    
-        global dt
 
-        # Timestep given by CFL:
-        dt=C_CFL*hmin/vmax
+        if BENCHMARK:
+            global dt
+
+            # Timestep given by CFL:
+            dt=C_CFL*hmin/vmax
+
+        print(dt*vmax/hmin)
+        exit()
 
         # Vytvor timeset pro simulaci:
         sim_timeset=np.arange(t_0,t_max,dt)
@@ -724,12 +730,16 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
         # print(float(em.EPS))
 
         # exit()
+
+        # print("eps: ",float(em.EPS))
+        # h_opt=em.C_EPS*2*float(em.EPS)/theta_grad_max_local
+        # print("h pro C_EPS=",em.C_EPS,": ",h_opt)
+        # print("dt pro C_CFL=",C_CFL,": ",C_CFL*h_opt*np.sqrt(sim_timeset[0])/lambda_)
+        # exit()
         #---------------------------------------
 
-        if not STABILITY:
+        if BENCHMARK:
             em.set_eps(hmax,theta_grad_max_local)
-        else:
-            em.EPS.assign(0.25)
 
         print('dt='+str(dt)+', eps='+str(float(em.EPS))+', h_max='+str(hmax)+', lambda='+str(lambda_)+', q_0='+str(prm.q_0))
 
@@ -772,8 +782,7 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
 
                 # Front position calculation and export:
                 front_position=stefan_front_position(sim[method][1])()
-                if rank==0:
-                    data_py["front_pos"][method].append(front_position)
+                data_py["front_pos"][method].append(front_position)
 
                 if SAVE_FRONT_POS_TXT:
                     txt_row=txt_row+' '+str(front_position)
@@ -917,27 +926,35 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                 with open('./out/data/'+str(DIM)+'d/convergence.csv', 'a') as csvfile:
 
                     filewriter = csv.writer(csvfile, delimiter=',',
-                                            quotechar='|',
+                                            #quotechar='|',
                                             quoting=csv.QUOTE_MINIMAL
                     )
                     
-                    params=r'\makecell{$h_{\mathrm{max}}$=\numprint{'+'{0:>2.3e}'.format(hmax)+r'} \\ ($\Delta t$=\numprint{'+r'{0:>2.3e}'.format(dt)+r'}, $\epsilon$=\numprint{'+'{0:>2.3e}'.format(float(em.EPS))+'})}'
+                    params=r'\makecell{$h$=\numprint{'+'{0:>2.1e}'.format(hmax)+r'}, $\epsilon$=\numprint{'+'{0:>2.1e}'.format(float(em.EPS))+r'} \\ ($\Delta t$=\numprint{'+r'{0:>2.1e}'.format(dt)+'})}'
                     for method in sim:
                         filewriter.writerow([params,
                                              method,
-                                             r'\numprint{'+'{0:>2.3e}'.format(errmethod[method][0])+'}',
-                                             r'\numprint{'+'{0:>2.3e}'.format(errmethod[method][1])+'}',
-                                             r'\numprint{'+'{0:>2.3e}'.format(errmethod[method][2])+'}'
+                                             r'\numprint{'+'{0:>2.2e}'.format(errmethod[method][0])+'}',
+                                             r'\numprint{'+'{0:>2.2e}'.format(errmethod[method][1])+'}',
+                                             r'\numprint{'+'{0:>2.2e}'.format(errmethod[method][2])+'}'
                         ])
                         params=''
 
         # Stability data:
         if STABILITY and sim:
+            theta_analytic_proj=dolfin.project(theta_analytic,sim[method][1].function_space(),solver_type="cg",preconditioner_type="hypre_amg")
             h=1/mesh.num_cells()
             for method in sim:
-                front_position=data_py["front_pos"][method][-1]
-                err=abs(front_position-2*lambda_*np.sqrt(sim_timeset[-1]))/(2*lambda_*np.sqrt(sim_timeset[-1]))
-                DATA_STABILITY[h][int(dt)][method]=err
+                fp=data_py["front_pos"][method][-1]
+                fp_err=abs(front_position-2*lambda_*np.sqrt(sim_timeset[-1]))/(2*lambda_*np.sqrt(sim_timeset[-1]))
+                
+                l2_err=dolfin.errornorm(theta_analytic_proj,sim[method][1],norm_type='L2')/dolfin.norm(theta_analytic_proj)
+                
+                linf_err=dolfin.norm(theta_analytic_proj.vector()-sim[method][1].vector(),'linf')/dolfin.norm(theta_analytic_proj.vector(),'linf')
+                
+                DATA_STABILITY[h][int(dt)][method]["fp_err"]=fp_err
+                DATA_STABILITY[h][int(dt)][method]["l2_err"]=l2_err
+                DATA_STABILITY[h][int(dt)][method]["linf_err"]=linf_err
         #==========================================================
         if SAVE_DAT:
             data_hdf.close()
@@ -985,8 +1002,11 @@ def stefan_convergence():
                              'linfnorm',
                              'deltas'])
 
-    for nx in meshres[DIM]:
-        prm.meshres=nx
+    for i,nx in enumerate(meshres[DIM]):
+        prm.meshres[DIM]=nx
+        global dt
+        dt = 2*meshres[DIM][-i-1]
+        em.EPS.assign(50./(10**(i+1)))
         stefan_benchmark()
 
 # Stability benchmark:
@@ -997,32 +1017,43 @@ def stefan_stability():
 
     global METHODS
 
-    # podobne pro menici se casovy krok
-    nu_max=3.32131870943e-7
+    # Compute with fixed epsilon:
+    em.EPS.assign(1.25)
+
+    # for eps=5.0 is h_opt=1/100, deltat_opt=25000
 
     meshres=[1e1,2.5e1,5e1,7.5e1,1e2,2.5e2,5e2,7.5e2,1e3,2.5e3,5e3,7.5e3,1e4]
-    timesteps=[1e1,2.5e1,5e1,7.5e1,1e2,2.5e2,5e2,7.5e2,1e3,2.5e3,5e3,7.5e3,1e4]
+    timesteps=[1e2,2.5e2,5e2,7.5e2,1e3,2.5e3,5e3,7.5e3,1e4,2.5e4,5e4,7.5e4,1e5]
 
-    meshres=[5e1,1e2]
-    timesteps=[1e2,2e2]
-
+    meshres=[]
+    timesteps=[]
+    for n in np.linspace(1,3,3):
+        meshres=np.append(meshres,np.linspace(10**n,9*10**n,9))
+        timesteps=np.append(timesteps,np.linspace(10**(n+1),9*10**(n+1),9))
+    meshres=np.append(meshres,1e4)
+    timesteps=np.append(timesteps,1e5)
+    
     for nx in meshres:
         prm.meshres[DIM]=int(nx)
         DATA_STABILITY[1/nx]={}
-        for dt in timesteps:
-            global C_CFL
-            C_CFL=dt*nx*nu_max
-            DATA_STABILITY[1/nx][int(dt)]={}
+        for deltat in timesteps:
+            global dt
+            dt = deltat
+            DATA_STABILITY[1/nx][dt]={}
             for method in ['EHC','TTM']:
+                DATA_STABILITY[1/nx][dt][method]={}
                 global METHODS
                 METHODS=[method]
                 try:
                     stefan_benchmark()
                 except RuntimeError:
-                    DATA_STABILITY[1/nx][dt][method]=1
+                    DATA_STABILITY[1/nx][dt][method]["fp_err"]=1
+                    DATA_STABILITY[1/nx][dt][method]["l2_err"]=1
+                    DATA_STABILITY[1/nx][dt][method]["linf_err"]=1
 
     # Save stability data for postprocessing:
-    np.save('./out/data/'+str(DIM)+'d/data_stability.npy', DATA_STABILITY)
+    if rank==0:
+        np.save('./out/data/'+str(DIM)+'d/data_stability.npy', DATA_STABILITY)
 
     # Version of the code for fixed meshres:
     # prm.meshres=1000

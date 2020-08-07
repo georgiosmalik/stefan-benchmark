@@ -10,8 +10,10 @@ import post.my_plot as mplt
 
 from matplotlib.legend_handler import HandlerLine2D, HandlerTuple
 from matplotlib.lines import Line2D
+from matplotlib import cm
+from matplotlib.colors import ListedColormap
 from mpl_toolkits.mplot3d import Axes3D
-from scipy.interpolate import UnivariateSpline
+from scipy.interpolate import UnivariateSpline, LinearNDInterpolator
 from scipy.optimize import curve_fit
 from scipy.interpolate import CubicSpline
 
@@ -260,40 +262,148 @@ def graph_front_vel(interpolation=True, curvefit=False):
 def graph_stability():
 
     data=DATA_STABILITY
+
+    # Set colormap for stability graph:
+    def cmp_(k,method):
+        vals = np.ones((k*128+1, 4))
+        vals[:k*128, 0] = np.linspace((2-k)*128/256, 1, k*128)
+        vals[:k*128, 1] = np.linspace((2-k)*128/256, 1, k*128)
+        vals[:k*128, 2] = np.linspace((2-k)*128/256, 1, k*128)
+        vals[-1,0:3] = linestyle[method]["color"]
+        vals[-1,0:3] = mplt.mypalette[0]
+        return ListedColormap(vals)
+
+    mycmp = {"TTM":cmp_(1,"TTM"),"EHC":cmp_(2,"EHC")}
     
-    X=np.log2(list(map(float,list(data.keys()))))
-    Y=np.log2(list(map(float,list(data[str(2**X[0])].keys()))))
+    X=np.log10(list(map(float,list(data.keys()))))
+    Y=np.log10(list(map(float,list(data[list(data.keys())[0]].keys()))))
 
-    methods=list(data[str(2**X[0])][str(2**X[0])].keys())
+    # Optimality bounds:
+    h_opt = np.log10(0.004)
+    deltat_opt = np.log10(25000)
 
-    X, Y = np.meshgrid(X,Y)
+    h_opt_line = [np.linspace(min(X),h_opt,11),deltat_opt*np.ones(11)]
+    deltat_opt_line = [h_opt*np.ones(11),np.linspace(min(Y),deltat_opt,11)]
+
+    def log_label(e):
+        return r"$10^{"+str(int(e))+"}$"
+    
+    xticks=np.fromiter((x for x in X if int(x)==x), dtype=X.dtype)
+    xticks_labels=list(map(log_label,xticks))
+
+    xticks = np.append(xticks,h_opt)
+    xticks_labels.append(r"$C_\epsilon \approx 1$")
+
+    yticks=np.fromiter((y for y in Y if int(y)==y), dtype=Y.dtype)
+    yticks_labels=list(map(log_label,yticks))
+
+    yticks = np.append(yticks,deltat_opt)
+    yticks_labels.append(r"$C_{\mathrm{CFL}} \approx 1$")
+
+    methods=list(data[list(data.keys())[0]][list(data[list(data.keys())[0]].keys())[0]].keys())
+
+    X_gr, Y_gr = np.meshgrid(X,Y)
+    positions = np.vstack([X_gr.ravel(),Y_gr.ravel()])
     Z = {}
+    Z_log={}
+
+    # contour plot (lines starts with ##)
+    ##mask = {}
+    
     for method in methods:
         Z[method]=[]
-        for x in X[0,:]:
+        Z_log[method]=[]
+        ##mask[method]=[]
+        for y in data[list(data.keys())[0]]:
             line=[]
-            for y in Y[:,0]:
-                line.append(data[str(2.**x)][str(2.**y)][method])
-                print(method+', C_eps='+str(2.**x)+', C_CFL='+str(2.**y)+', err='+str(data[str(2.**x)][str(2.**y)][method]))
+            ##mask_line = []
+            for x in data:
+                line.append(data[x][y][method])
+                ##if data[x][y][method] == 1:
+                    ##mask_line.append(True)
+                ##else:
+                    ##mask_line.append(False)
             Z[method].append(line)
+            ##mask[method].append(mask_line)
         Z[method]=np.asarray(Z[method])
-            
+        ##mask[method]=np.asarray(mask[method],dtype=bool)
+
+        Z_log[method]=np.log10(Z[method])
+        ##Z_log[method]=np.ma.array(Z_log[method],mask=mask[method])
+
+        # Contour plot
+        ##fig, ax = plt.subplots(1,1)
+
+        # 3d plot:
         fig = plt.figure()
-        ax = fig.add_subplot(111, projection='3d')
+        ax = fig.gca(projection='3d')
+        surf = ax.plot_surface(X_gr,Y_gr,Z_log[method], linewidth=0.5, alpha=0.9, cmap=mycmp[method])
+        
+        # Contour plot:
+        # v = {"TTM":np.linspace(-2.5,0.,11, endpoint=True), "EHC":np.linspace(-5.,0.,21, endpoint=True)}
+        
+        # cs = ax.contourf(X,Y,Z_log[method], v[method], cmap=mycmp[method], corner_mask=True)
+        # ax.contour(cs, linestyles='solid', linewidths=0.5, colors='k')
+
+        # ax.plot(np.ma.array(X,mask=~mask[method]),Y, linestyle='none', color=mplt.mypalette[0], marker='s', markersize=2,label='not converged')
+        # plt.legend(loc="lower right", bbox_to_anchor=(1.,0.), frameon=True, fancybox=False, borderaxespad=0.)
+        # plt.grid(b=None)
+
+        # cbar = fig.colorbar(cs, ticks=v[method])
+        # cbar.ax.set_ylabel(r"$\Delta s_{\mathrm{r}}$")
+        #------------------
+        
+        ax.set_aspect('equal','box')
+    
+        ax.set_xlabel(r"$h\,[m]$")
         ax.invert_xaxis()
+        
+        ax.set_ylabel(r"$\Delta t\,[s]$")
 
-        ax.set_xlabel(r"$\log_2(C_\epsilon)$")
-        ax.set_ylabel(r"$\log_2(C_{\mathrm{CFL}})$")
+        ax.set_zlabel(r"$\Delta s_{\mathrm{r}}$")
 
-        ax.plot_surface(X,Y,Z[method], linewidth=0, alpha = 0.8)
+        color = mplt.mypalette[0]
+        
+        ax.set_xticks(xticks)
+        ax.set_xticklabels(xticks_labels)
+        
+        ax.xaxis.get_ticklabels()[-1].set_color(color)
+        ax.xaxis.get_ticklines()[-1].set_color(color)
+        
+        ax.set_yticks(yticks)
+        ax.set_yticklabels(yticks_labels)
 
-        ax.view_init(elev=45., azim=-45.)
+        ax.yaxis.get_ticklabels()[-1].set_color(color)
+        ax.yaxis.get_ticklines()[-1].set_color(color)
 
-        fig.set_size_inches(mplt.set_size(345.,ratio=3*(5**.5-1)/8),forward=True)
+        zticks=np.linspace(int(ax.get_zlim()[0]),0,abs(int(ax.get_zlim()[0]))+1)
+        zticks_labels=list(map(log_label,zticks[:-1]))
+        zticks_labels.append(r"$1$")
+
+        ax.set_zticks(zticks)
+        ax.set_zticklabels(zticks_labels)
+        
+        ##ax.yaxis.get_ticklabels()[-1].set_rotation(90)
+        ##ax.yaxis.get_ticklabels()[-1].set_verticalalignment('center')
+
+        
+        # Plot optimality boundary in x-y plane (for eps=0.25):
+        ax.plot(*h_opt_line, zs=ax.get_zlim()[0], zdir='z', linestyle = 'dotted', color=color)
+        ax.plot(*deltat_opt_line, zs=ax.get_zlim()[0], zdir='z', linestyle = 'dotted', color=color)
+
+        # Project optimality boundary on the surface of graph:
+        surf_int = LinearNDInterpolator(np.transpose(positions),np.vstack(Z_log[method].ravel()))
+        ax.plot(*h_opt_line,np.transpose(surf_int(list(zip(*h_opt_line))))[0], color=color)
+        ax.plot(*deltat_opt_line,np.transpose(surf_int(list(zip(*deltat_opt_line))))[0], color=color)
+
+        ax.view_init(elev=20., azim=-35)
+
+        fig.set_size_inches(mplt.set_size(345/2.,ratio=1),forward=True)
+        
         fig.savefig('./out/fig/'+str(DIM)+'d/stability_'+method+'.pdf',
                     format='pdf',
-                    bbox_inches='tight',
-                    transparent=False
+                    #bbox_inches='tight',
+                    transparent=True
         )
     
 #----------------------------------

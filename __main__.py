@@ -39,25 +39,35 @@ if __name__ == "__main__":
     sim.stefan_benchmark.prm.R1=0.1*(dim-1)
         
     if "convergence" in sys.argv:
+
+        # Set start and end of the simulation:
+        #sim.stefan_benchmark.R_START=sim.stefan_benchmark.prm.R1+0.2
+        #sim.stefan_benchmark.R_END=sim.stefan_benchmark.prm.R2-0.2
+        
         # Run convergence:
         sim.stefan_benchmark.CONVERGENCE=True
         sim.stefan_benchmark.stefan_convergence()
         
     elif "stability" in sys.argv:
+        
+        # Set shorter span for the simulation:
+        sim.stefan_benchmark.R_START=0.4
+        sim.stefan_benchmark.R_END=0.6
+        
         # Run stability:
         sim.stefan_benchmark.STABILITY=True
         sim.stefan_benchmark.stefan_stability()
         
     elif "postprocessing" in sys.argv:
         # Run postprocessing (benchmark data):
-        sim.stefan_benchmark.splt.load_data()
-        sim.stefan_benchmark.splt.graph_temp()
-        sim.stefan_benchmark.splt.graph_front_pos()
-        sim.stefan_benchmark.splt.graph_front_vel()
+        # sim.stefan_benchmark.splt.load_data()
+        # sim.stefan_benchmark.splt.graph_temp()
+        # sim.stefan_benchmark.splt.graph_front_pos()
+        # sim.stefan_benchmark.splt.graph_front_vel()
 
         # Run postprocessing (stability data):
-        # sim.stefan_benchmark.splt.load_data_stability()
-        # sim.stefan_benchmark.splt.graph_stability()
+        sim.stefan_benchmark.splt.load_data_stability()
+        sim.stefan_benchmark.splt.graph_stability()
 
     elif "preprocessing" in sys.argv:
         # Build mesh (only 3d):

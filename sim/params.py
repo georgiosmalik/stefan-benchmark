@@ -3,20 +3,23 @@
 #---------------------------------
 
 # Parametry ulohy: geometricke na generovani site, fyzikalni pro formulaci problemu,
+# Ukoly:
+# 1. prepsat veliciny, aby odpovidaly znaceni v clanku
+# 2. vymazat nepouzivane veliciny
 
 #------------------------------------------------
 # Material and physical parameters of the problem
 #------------------------------------------------
 # Physical parameters:
-L_m = 335e3               # Latent heat of melting
-rho = 1000.
+L_m = 335e3              # Latent heat of melting [J/kg]
+rho = 1000.              # Density [kg*m**(-3)]
 rho_l = 1000.            # Density of water (Kowal value: 999.840281167108)
 rho_s = 917.             # Density of ice
 cp_l = 4182.              # Specific heat of water
 cp_s = 2116.              # Specific heat of ice
 cp_m = (cp_l+cp_s)/2                   # Specific heat of the mushy region
-k_l = 0.6               # Thermal conductivity of water
-k_s = 2.26                # Thermal conductivity of ice
+k_l = 0.6                # Thermal conductivity of water [W/m/K]
+k_s = 2.26               # Thermal conductivity of ice [W/m/K]
 mu_l = 0.00103               # Dynamic viscosity of water
 mu_s = 1e5                # Dynamic viscosity of ice
 nu_l = mu_l/rho_l            # Kinematic viscosity of water
@@ -33,14 +36,13 @@ g = 9.81                  # Gravitational acceleration
 # 2d,3d
 R1 = 0.1
 R2 = 1.
-meshres = {1:10000,2:220,3:0.05}      # 2d: 220 results in h_max=0.009
+meshres = {1:100,2:220,3:0.05}      # 2d: 220 results in h_max=0.009
 # Physical:
 q_0 = 2e5                           # source heat flux in origin (value for 1d)
 theta_0 = 373.                      # heating temperature for 1D
 theta_m = 273.                      # melting temperature
 theta_i = 263.                      # initial temperature
 delta_theta = theta_0 - theta_m     # temperature difference
-K = 1.                              # boundary heat flow for Stefan 2D
 theta_left = 283.                   # Heating temperature [K]
 theta_right = 263.                  # Freezing temperature [K]
 #------------------------------------------------
