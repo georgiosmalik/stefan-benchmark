@@ -572,28 +572,7 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                     problem = dolfin.NonlinearVariationalProblem(F,theta,bcs=bc_form,J=dolfin.derivative(F,theta))
                     solver = dolfin.NonlinearVariationalSolver(problem)
                     solver.parameters["newton_solver"]=NEWTON_PARAMS
-                    # solver.parameters["nonlinear_solver"]="newton"
-                    # solver.parameters["newton_solver"]["linear_solver"]="bicgstab"
-                    # solver.parameters["newton_solver"]["absolute_tolerance"]=1e-5
-                    # solver.parameters["newton_solver"]["maximum_iterations"]=25
-                    #solver.parameters["newton_solver"]["linear_solver"]="mumps"
-                    #solver.parameters["newton_solver"]["linear_solver"]="cg" 
-                    #solver.parameters["newton_solver"]["preconditioner"]="hypre_amg"
                     
-                    
-                    #solver.parameters["newton_solver"]['linear_solver'] = dolfin.Parameters("CG")
-                    #dolfin.info(solver.parameters, True)
-                    #exit()
-                    #dolfin.info(solver.parameters["newton_solver"], True)
-                    #solver.parameters["krylov_solver"]="CG"
-                    #solver.parameters["newton_solver"]["linear_solver"]=dolfin.Parameters("CG")
-                    #solver.parameters['snes_solver']['linear_solver']= "cg"
-                    #solver.parameters['snes_solver']['preconditioner'] = "hypre_amg"
-                    #exit()
-
-                    
-
-               
                     return solver, theta, theta_k    
 
                 F = k_eff(theta_k,deg='C0')*dolfin.inner(dolfin.grad(_theta), dolfin.grad(theta_))*dx+prm.rho*c_p_eff(theta_k,deg='disC')/dt*(dolfin.inner(_theta, theta_) - dolfin.inner(theta_k, theta_))*dx - sum(q_form)
@@ -709,38 +688,13 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
             file_front_pos.write('- ---------- ----- -----\n')
         #--------------------------------------
         # Set epsilon (mollifying parameter)
+
         # Various types of Linf temp grad bound:
+
         # 1. analytic:
         def kappa_d(n):
             return n*np.pi**(n/2)/gamma(n/2+1)
         theta_grad_max_analytic=(prm.q_0*2**(1-DIM)/(prm.k_l*kappa_d(DIM)))*(lambda_**(1-DIM))*np.exp(-lambda_**2/prm.kappa_l)/np.sqrt(sim_timeset[0])
-        # 2. local:
-        theta = dolfin.project(theta_analytic,T,solver_type="cg",preconditioner_type="hypre_amg")
-        char = dolfin.conditional(abs(theta-prm.theta_m)<1.,1.,0.)
-        theta_norm=dolfin.project(char*dolfin.sqrt(dolfin.inner(dolfin.grad(theta),dolfin.grad(theta))),T,solver_type="cg",preconditioner_type="hypre_amg")
-        theta_grad_max_local=theta_norm.vector().norm('linf')
-
-        # 3. global:
-        theta_norm=dolfin.project(dolfin.sqrt(dolfin.inner(dolfin.grad(theta),dolfin.grad(theta))),theta.function_space())
-        theta_grad_max_global=theta_norm.vector().norm('linf')
-
-        # Experiment with local bound temp width
-        # print(theta_grad_max_analytic, theta_grad_max_local, theta_grad_max_global)
-
-        # em.set_eps(hmax,theta_grad_max_analytic)
-        # print(float(em.EPS))
-        # em.set_eps(hmax,theta_grad_max_local)
-        # print(float(em.EPS))
-        # em.set_eps(hmax,theta_grad_max_global)
-        # print(float(em.EPS))
-
-        # exit()
-
-        # print("eps: ",float(em.EPS))
-        # h_opt=em.C_EPS*2*float(em.EPS)/theta_grad_max_local
-        # print("h pro C_EPS=",em.C_EPS,": ",h_opt)
-        # print("dt pro C_CFL=",C_CFL,": ",C_CFL*h_opt*np.sqrt(sim_timeset[0])/lambda_)
-        # exit()
         #---------------------------------------
 
         # ------------------------------

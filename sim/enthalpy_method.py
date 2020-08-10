@@ -186,19 +186,17 @@ def get_h_eps(theta, projection = 'local', analytic = False):
 
     def norm_theta_grad_local():
 
-        T = theta.function_space()
-
         delta_local = 1.
         
         local_proj = dolfin.conditional(abs(theta-prm.theta_m)<delta_local,1.,0.)
         
-        norm_theta_grad = dolfin.project(local_proj*dolfin.sqrt(dolfin.inner(dolfin.grad(theta),dolfin.grad(theta))),T,solver_type="cg",preconditioner_type="hypre_amg")
+        norm_theta_grad = dolfin.project(local_proj*dolfin.sqrt(dolfin.inner(dolfin.grad(theta),dolfin.grad(theta))),theta.function_space(),solver_type="cg",preconditioner_type="hypre_amg")
         
         return norm_theta_grad.vector().norm('linf')
 
     def norm_theta_grad_global():
         
-        norm_theta_grad=dolfin.project(dolfin.sqrt(dolfin.inner(dolfin.grad(theta),dolfin.grad(theta))),theta.function_space())
+        norm_theta_grad=dolfin.project(dolfin.sqrt(dolfin.inner(dolfin.grad(theta),dolfin.grad(theta))),theta.function_space(),solver_type="cg",preconditioner_type="hypre_amg")
 
         return norm_theta_grad.vector().norm('linf')
 
