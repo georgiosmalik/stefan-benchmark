@@ -2,25 +2,39 @@
 # Enthalpy method module
 #-----------------------
 
-# Obsahuje definice funkci pro enthalpy metodu, formulace Cao, Equivalent heat capacity i nasi formulaci enthalpy metody
+# Obsahuje definice numerickych aproximaci funkci pro enthalpy metodu
 
 # Poznamky a dodelavky:
-# 1. neni lepsi do formulace pro zhlazene fyzikalni parametry vkladat Expression misto Conditionalu?
+# 1. neni lepsi do formulace pro zhlazene fyzikalni parametry vkladat Expression misto Conditionalu (UFL)?
 
 import dolfin
 import numpy as np
 
+import sim.params as prm
+
 from ufl import tanh
 
-# Global parameters
-# Mollification constants
-EPS = dolfin.Constant(0.4)
-DEG = 'Cinf'
-C_EPS=1.
+# ------------------------------------
+# Global parameters of enthalpy method
+# ------------------------------------
 
-#---------------------------------
-# Definition of additional methods
-#---------------------------------
+# Temperature mollification parameter
+EPS = dolfin.Constant(0.5)
+
+# Relaxation parameter for optimal space discretization bound
+C_EPS = 1.
+
+# Degree of approximation of special functions (Dirac and Heaviside)
+DEG = 'Cinf'
+# ====================================
+
+# CFL condition relaxation parameter
+C_CFL = 1.
+
+# -----------------------------------------
+# Numerical approximations of distributions
+# -----------------------------------------
+
 # Auxiliary functions:
 # Hyperbolic tangent:
 # Note: this definition of hyperbolic tangent is unstable, use the one defined by ufl
@@ -94,14 +108,14 @@ def heaviside(x, x0=0.0, eps=EPS, deg=DEG):
         if type(x) == np.ndarray:
             return 0.5*np.tanh(2.5*(x-float(x0))/eps) + 0.5
         return 0.5*tanh(2.5*(x-x0)/eps) + 0.5
-        
-    degswitch = {
+
+    deg_switch = {
         'disC':hs_disC,
         'C0':hs_C0,
         'C1':hs_C1,
         'Cinf':hs_Cinf
         }
-    return degswitch.get(deg,"Please enter 'CO','C1','Cinf', or 'exact'.")
+    return deg_switch.get(deg,"Please enter 'CO','C1','Cinf', or 'exact'.")
 
 # Dirac function
 def df(x, x0=0.0, eps=EPS, deg=DEG):
@@ -148,14 +162,17 @@ def df(x, x0=0.0, eps=EPS, deg=DEG):
             return 1./(0.6*eps*np.sqrt(np.pi))*np.exp(-(x-x0)**2/(0.6**2*eps**2))
         return 1./(0.6*eps*np.sqrt(np.pi))*dolfin.exp(-(x-x0)**2/(0.6**2*eps**2))
         
-    degswitch = {
+    deg_switch = {
         'disC': df_disC,
         'C0':df_C0,
         'C1':df_C1,
         'Cinf':df_Cinf
         }
-    return degswitch.get(deg,"Please enter 'disC','CO','C1',or 'Cinf'.")
+    return deg_switch.get(deg,"Please enter 'disC','CO','C1',or 'Cinf'.")
 
+# -----------------------------------------
+# Tools for effective parameter definitions
+# -----------------------------------------
 def mollify(xminus, xplus, x, x0=0.0, eps=EPS, deg=DEG):
     """Mollify the jump between xminus and xplus values."""
     return xminus*(1-heaviside(x, x0, eps, deg)()) + xplus*heaviside(x, x0, eps, deg)()
@@ -163,10 +180,42 @@ def mollify(xminus, xplus, x, x0=0.0, eps=EPS, deg=DEG):
 def dirac(xvalue, x, x0=0.0, eps=EPS, deg=DEG):
     """Return dirac with L1 norm of xvalue."""
     return xvalue*df(x,x0,eps,deg)()
+# =========================================
 
-def set_eps(hmax,theta_grad_max):
-    # hmax=dolfin.MPI.max(mesh.mpi_comm(),mesh.hmax())
-    # theta_norm=dolfin.project(dolfin.sqrt(dolfin.inner(dolfin.grad(theta),dolfin.grad(theta))),theta.function_space())
-    # theta_grad_max=theta_norm.vector().norm('linf')
-    global EPS
-    EPS.assign(hmax*theta_grad_max/C_EPS)
+def get_h_eps(theta, projection = 'local', analytic = False):
+
+    def norm_theta_grad_local():
+
+        T = theta.function_space()
+
+        delta_local = 1.
+        
+        local_proj = dolfin.conditional(abs(theta-prm.theta_m)<delta_local,1.,0.)
+        
+        norm_theta_grad = dolfin.project(local_proj*dolfin.sqrt(dolfin.inner(dolfin.grad(theta),dolfin.grad(theta))),T,solver_type="cg",preconditioner_type="hypre_amg")
+        
+        return norm_theta_grad.vector().norm('linf')
+
+    def norm_theta_grad_global():
+        
+        norm_theta_grad=dolfin.project(dolfin.sqrt(dolfin.inner(dolfin.grad(theta),dolfin.grad(theta))),theta.function_space())
+
+        return norm_theta_grad.vector().norm('linf')
+
+    projection_switch = {
+        'local': norm_theta_grad_local,
+        'global': norm_theta_grad_global
+        }
+
+    if analytic:
+        theta_grad_max = theta
+    else:
+        theta_grad_max = projection_switch.get(projection,
+                                           "Please choose 'local', or 'global' for projection."
+        )()
+        
+    return C_EPS*float(EPS)/theta_grad_max
+
+def get_delta_t_cfl(hmin, vmax):
+    
+    return C_CFL*hmin/vmax

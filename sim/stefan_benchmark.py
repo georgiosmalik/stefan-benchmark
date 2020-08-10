@@ -57,9 +57,15 @@ dolfin.set_log_level(30)
 
 #------------------------------------
 # Global parameters of the simulation
-#====================================
+#------------------------------------
+
+# Dimension of problem formulation
 DIM=0
+
+# Type of boundary formulation
 BOUNDARY_FORMULATION="NN"
+
+#
 METHODS=['EHC','TTM']
 
 # Flag for linear/nonlinear formulation of ehc and em
@@ -69,14 +75,8 @@ NONLINEAR=True
 DEGREE=1
 
 # Starting and ending radius of simulation
-R_START=0.4
-R_END=0.65
-
-# CFL condition constant
-C_CFL=0.8
-
-# Mollification constant
-em.C_EPS=2.5
+R_START=0.2
+R_END=0.8
 
 # Nonlinear solver parameters
 NEWTON_PARAMS=dolfin.Parameters("newton_solver")
@@ -85,26 +85,30 @@ NEWTON_PARAMS.add("absolute_tolerance",1e-5)
 NEWTON_PARAMS.add("maximum_iterations",25)
 
 # Specify data output
-GRAPH=False
-SAVE_DAT=False
-TEMP_TXT_DAT=False
-SAVE_FRONT_POS_TXT=True
+GRAPH = False
+SAVE_DAT = False
+TEMP_TXT_DAT = False
+SAVE_FRONT_POS_TXT = True
 
 # Types of simulation
-BENCHMARK=False
-CONVERGENCE=False
-STABILITY=False
+BENCHMARK = False
+CONVERGENCE = False
+STABILITY = False
 
 # Data for stability testing:
 DATA_STABILITY={}
 
-# Temporal scheme for EHC model
+# Temporal discretization scheme for EHC model (THETA = 0.5 is Crank-Nicholson)
 THETA=0.5
 
 # TEST (tuning 3d benchmark)
 PROJECT=False
 #---------------------------
-#=====================================
+# ===================================
+
+# ------------------------------------------------------
+# Analytic solution of radially symmetric Stefan problem
+# ------------------------------------------------------
 
 def stefan_analytic_sol(dim, ploteq=False):
     """Return analytic solution of the radially symmetric Stefan problem."""
@@ -374,6 +378,11 @@ def stefan_analytic_sol(dim, ploteq=False):
         3:theta_sol_3d
         }
     return dimswitch.get(dim, "Please enter 1d, 2d, or 3d.")
+# ======================================================
+
+# ------------------------------------------------
+# Finite element implementation of enthalpy method
+# ------------------------------------------------
 
 def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_in, q_out, methods):
 
@@ -383,39 +392,33 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
 
     global rank
     rank=dolfin.MPI.rank(mesh.mpi_comm())
+
+    # Mesh parameters:
+    global hmin
+    hmin = dolfin.MPI.min(mesh.mpi_comm(),mesh.hmin())
+    
+    global hmax
+    hmax = dolfin.MPI.max(mesh.mpi_comm(),mesh.hmax())
     
     def stefan_loop_timesets():
 
-        # Nastav pocatecni a koncovy cas podle presne polohy fronty tani:
+        # Set start and end time of simulation
         t_0=(R_START/(2*lambda_))**2
         t_max=(R_END/(2*lambda_))**2
 
         # Set timestep based on standart CFL condition:
-
-        global hmin
-        
-        hmin=dolfin.MPI.min(mesh.mpi_comm(),mesh.hmin())
-
-        global hmax
-
-        hmax=dolfin.MPI.max(mesh.mpi_comm(),mesh.hmax())
 
         # Maximal velocity of melting front:
         vmax=lambda_/np.sqrt(t_0)
 
         if BENCHMARK:
             global dt
+            dt = em.get_delta_t_cfl(hmin, vmax)
 
-            # Timestep given by CFL:
-            dt=C_CFL*hmin/vmax
-
-        print(dt*vmax/hmin)
-        exit()
-
-        # Vytvor timeset pro simulaci:
+        # Set timeset for simulation
         sim_timeset=np.arange(t_0,t_max,dt)
 
-        # Vytvor timeset pro ukladani:
+        # Set timeset for data output
         numdats=100
 
         if numdats >= len(sim_timeset):
@@ -424,9 +427,11 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
             idx_dats=np.round(np.linspace(0,len(sim_timeset)-1,numdats)).astype(int)
             dat_timeset=sim_timeset[idx_dats]
 
-        # Vytvor timeset pro vykreslovani:
+        # Set timeset for plotting
         numplots=3
+        
         idx_plots=np.round(np.linspace(0,len(dat_timeset)-1,numplots)).astype(int)
+        
         plot_timeset=dat_timeset[idx_plots]
         
         return sim_timeset, dat_timeset, plot_timeset
@@ -738,25 +743,63 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
         # exit()
         #---------------------------------------
 
-        if BENCHMARK:
-            em.set_eps(hmax,theta_grad_max_local)
+        # ------------------------------
+        # Save discretization parameters
+        # ------------------------------
 
-        print('dt='+str(dt)+', eps='+str(float(em.EPS))+', h_max='+str(hmax)+', lambda='+str(lambda_)+', q_0='+str(prm.q_0))
-
-        # Save discretization parameters:
+        # Get h_eps bound
+        theta_0 = dolfin.project(theta_analytic,T,solver_type="cg",preconditioner_type="hypre_amg")
+        h_eps = em.get_h_eps(theta_0)
+        
+        # Into hdf file
         if SAVE_DAT:
-            data_hdf.write(dolfin.project(em.C_EPS,T,solver_type="cg",preconditioner_type="hypre_amg"),"C_eps")
-            data_hdf.write(dolfin.project(C_CFL,T,solver_type="cg",preconditioner_type="hypre_amg"),"C_CFL")
+
+            # Spatial discretization parameters:
             data_hdf.write(dolfin.project(hmax,T,solver_type="cg",preconditioner_type="hypre_amg"),"h_max")
             data_hdf.write(dolfin.project(hmin,T,solver_type="cg",preconditioner_type="hypre_amg"),"h_min")
+            data_hdf.write(dolfin.project(prm.meshres[DIM],T,solver_type="cg",preconditioner_type="hypre_amg"),"meshres")
 
-        data_py["disc_params"]["C_eps"]=em.C_EPS
-        data_py["disc_params"]["C_CFL"]=C_CFL
-        data_py["disc_params"]["h_max"]=hmax
-        data_py["disc_params"]["h_min"]=hmin
-        data_py["disc_params"]["eps"]=float(em.EPS)
-        data_py["disc_params"]["dt"]=dt
-        data_py["disc_params"]["meshres"]=prm.meshres
+            # Temporal discretization parameters:
+            data_hdf.write(dolfin.project(em.C_CFL,T,solver_type="cg",preconditioner_type="hypre_amg"),"C_CFL")
+            data_hdf.write(dolfin.project(dt,T,solver_type="cg",preconditioner_type="hypre_amg"),"dt")
+
+            # Temperature mollification parameters:
+            data_hdf.write(dolfin.project(float(em.EPS),T,solver_type="cg",preconditioner_type="hypre_amg"),"eps")
+            data_hdf.write(dolfin.project(h_eps,T,solver_type="cg",preconditioner_type="hypre_amg"),"h_eps")
+            data_hdf.write(dolfin.project(em.C_EPS,T,solver_type="cg",preconditioner_type="hypre_amg"),"C_eps")
+            
+            
+
+        # Into numpy dict
+        
+        # Spatial discretization parameters:
+        data_py["disc_params"]["h_max"] = hmax
+        data_py["disc_params"]["h_min"] = hmin
+        data_py["disc_params"]["meshres"] = prm.meshres[DIM]
+        
+        # Temporal discretization parameters:
+        data_py["disc_params"]["dt"] = dt
+        data_py["disc_params"]["C_CFL"] = em.C_CFL
+
+        # Temperature mollification parameters:
+        data_py["disc_params"]["eps"] = float(em.EPS)
+        data_py["disc_params"]["h_eps"] = h_eps
+        data_py["disc_params"]["C_eps"] = em.C_EPS
+        # ==============================
+        
+        # Print information about simulation parameters:
+        print(" ======================\n",
+              "Simulation parameters:\n",
+              "lambda = " + str(lambda_) + ",\n",
+              "Q_0 = " + str(prm.q_0) + ",\n",
+              "----------------------\n",
+              "Discretization parameters:\n",
+              "eps = " + str(float(em.EPS)) + ", (h_eps = " + str(h_eps) + " with C_eps = " + str(em.C_EPS) + "),\n",
+              "h_max = " + str(hmax) + ", h_min = " + str(hmin) + ",\n"
+              "dt = " + str(dt) + " (C_CFL = " + str(em.C_CFL) + '),\n',
+              "======================\n",
+        )
+        
         
         index=0
         
@@ -863,7 +906,7 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                         else:
                             comm.send(y_range,dest=0)
 
-            # Kod na vytvareni binarnich datovych souboru
+            # Kod na vytvareni textovych datovych souboru
             if TEMP_TXT_DAT and (t in plot_timeset):
                 # Creating output file:
                 output_file = 'out/data/'+str(DIM)+'d/data_t_%s.txt' % (str(index))
@@ -961,8 +1004,13 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
             data_xdmf.close()
                 
     return stefan_loop
+# ================================================
 
-# Spust simulaci
+# ---------------------------
+# Various types of simulation
+# ---------------------------
+
+# Benchmark simulation:
 def stefan_benchmark():
     # preprocessing:
     (mesh,boundary,n,dx,ds)=smsh.stefan_mesh(DIM)()
@@ -1072,6 +1120,8 @@ def stefan_stability():
     #         stefan_benchmark()
     # # Save stability data for postprocessing:
     # np.save('./out/data/'+str(DIM)+'d/data_stability.npy', DATA_STABILITY)
+
+# ===========================
 
 
 # Poznamka z 7.6.: bohuzel nelinearni formulace nekonverguje pro Cinf aproximace heavisida a diraca u cp_eff, pokud zvolis C1/Cinf pro HS/D pak to funguje, pro Cinf/Cinf haze nan pro reziduum, prozkoumej co se deje

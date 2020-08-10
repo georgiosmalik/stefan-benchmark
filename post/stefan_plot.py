@@ -91,7 +91,7 @@ def graph_temp():
                            linestyle='None',
                            color=mplt.mypalette[color_id],
                            marker=linestyle[method]["marker"],
-                           markersize=6,
+                           markersize=4,
                            markevery=(0.+len(methodplots)*0.1/len(methods),0.1)
             )
             methodplots=methodplots+(plot,)
@@ -107,14 +107,14 @@ def graph_temp():
     # Create two graph legends, for methods and timesteps:
     second_legend_elems = [Line2D([0],[0],color=mplt.mypalette[1],label='analytic')]
     for method in methods:
-        leg_element=Line2D([0],[0],color=mplt.mypalette[1],marker=linestyle[method]["marker"],linestyle='None',label=method)
+        leg_element=Line2D([0],[0],color=mplt.mypalette[1],marker=linestyle[method]["marker"],markersize=4,linestyle='None',label=method)
         second_legend_elems.append(leg_element)
     second_legend=plt.legend(handles=second_legend_elems,loc="upper right", frameon=True, fancybox=False, borderaxespad=0.)
     ax2 = plt.gca().add_artist(second_legend)
     if methodplots:
-        ax.legend(plots,names,loc="upper right", bbox_to_anchor=(0.7815,1.),handler_map={tuple: HandlerTuple(ndivide=len(methodplots))}, frameon=True, fancybox=False, borderaxespad=0.)
+        ax.legend(plots,names,loc="upper right", bbox_to_anchor=(0.685,1.),handler_map={tuple: HandlerTuple(ndivide=len(methodplots))}, frameon=True, fancybox=False, borderaxespad=0.)
     else:
-        ax.legend(names,loc="upper right", bbox_to_anchor=(0.7815,1.), frameon=True, fancybox=False, borderaxespad=0.)
+        ax.legend(names,loc="upper right", bbox_to_anchor=(0.685,1.), frameon=True, fancybox=False, borderaxespad=0.)
 
     # Make custom ticks:
     ax.set_xticks(xticks[0])
@@ -124,12 +124,17 @@ def graph_temp():
 
     #------------------------------
     # Save the figure:
-    c_eps=data["disc_params"]["C_eps"]
-    c_cfl=data["disc_params"]["C_CFL"]
     h_max=data["disc_params"]["h_max"]
+    
+    eps=data["disc_params"]["eps"]
+    h_eps=data["disc_params"]["h_eps"]
+    c_eps=data["disc_params"]["C_eps"]
+    
+    dt=data["disc_params"]["dt"]
+    c_cfl=data["disc_params"]["C_CFL"]
 
-    fig.set_size_inches(mplt.set_size(345.,ratio=3*(5**.5-1)/8),forward=True)
-    fig.savefig('./out/fig/'+str(DIM)+'d/temp_dist_(h_max='+'{0:>2.2e}'.format(h_max)+',C_eps='+'{0:>2.1e}'.format(c_eps)+',C_CFL='+'{0:>2.1e}'.format(c_cfl)+').pdf',
+    fig.set_size_inches(mplt.set_size(345./2),forward=True)
+    fig.savefig('./out/fig/'+str(DIM)+'d/temp_dist_(eps='+'{0:>1.1e}'.format(eps)+'(h_eps='+'{0:>1.2e}'.format(h_eps)+',C_eps='+'{0:>1.1e}'.format(c_eps)+'),h_max='+'{0:>1.2e}'.format(h_max)+',dt='+'{0:>1.2e}'.format(dt)+'(C_CFL='+'{0:>1.1e}'.format(c_cfl)+').pdf',
                 format='pdf',
                 bbox_inches='tight',
                 transparent=False
@@ -181,9 +186,14 @@ def graph_front_pos(offset=False,ls=False):
         legend.append(method)
 
     # Save the figure:
-    c_eps=data["disc_params"]["C_eps"]
-    c_cfl=data["disc_params"]["C_CFL"]
     h_max=data["disc_params"]["h_max"]
+    
+    eps=data["disc_params"]["eps"]
+    h_eps=data["disc_params"]["h_eps"]
+    c_eps=data["disc_params"]["C_eps"]
+    
+    dt=data["disc_params"]["dt"]
+    c_cfl=data["disc_params"]["C_CFL"]
                          
     mplt.graph1d(plot_data,
                  color=mplt.mypalette[:len(methods)+1],
@@ -193,7 +203,7 @@ def graph_front_pos(offset=False,ls=False):
                  xticks=[[timeset[0],timeset[-1]],[r"$t_0$",r"$t_{\mathrm{max}}$"]],
                  yticks=[[],[]],
                  ylim={"bottom":0.},
-                 savefig={"width":345./2,"name":'./out/fig/'+str(DIM)+'d/front_pos_(h_max='+'{0:>2.2e}'.format(h_max)+',C_eps='+'{0:>2.1e}'.format(c_eps)+',C_CFL='+'{0:>2.1e}'.format(c_cfl)+').pdf'},)
+                 savefig={"width":345./2,"name":'./out/fig/'+str(DIM)+'d/front_pos_(eps='+'{0:>1.1e}'.format(eps)+'(h_eps='+'{0:>1.2e}'.format(h_eps)+',C_eps='+'{0:>1.1e}'.format(c_eps)+'),h_max='+'{0:>1.2e}'.format(h_max)+',dt='+'{0:>1.2e}'.format(dt)+'(C_CFL='+'{0:>1.1e}'.format(c_cfl)+').pdf'},)
 
 def graph_front_vel(interpolation=True, curvefit=False):
 
@@ -242,9 +252,14 @@ def graph_front_vel(interpolation=True, curvefit=False):
             legend.append(method)
             
     # Save the figure:
-    c_eps=data["disc_params"]["C_eps"]
-    c_cfl=data["disc_params"]["C_CFL"]
     h_max=data["disc_params"]["h_max"]
+    
+    eps=data["disc_params"]["eps"]
+    h_eps=data["disc_params"]["h_eps"]
+    c_eps=data["disc_params"]["C_eps"]
+    
+    dt=data["disc_params"]["dt"]
+    c_cfl=data["disc_params"]["C_CFL"]
             
     mplt.graph1d(plot_data,
                  color=2*mplt.mypalette[:len(methods)+1],
@@ -255,7 +270,7 @@ def graph_front_vel(interpolation=True, curvefit=False):
                  yticks=[[],[]],
                  ylim={"bottom":0.},
                  savefig={"width":345./2,
-                          "name":'./out/fig/'+str(DIM)+'d/front_vel_(h_max='+'{0:>2.2e}'.format(h_max)+',C_eps='+'{0:>2.1e}'.format(c_eps)+',C_CFL='+'{0:>2.1e}'.format(c_cfl)+').pdf'
+                          "name":'./out/fig/'+str(DIM)+'d/front_vel_(eps='+'{0:>1.1e}'.format(eps)+'(h_eps='+'{0:>1.2e}'.format(h_eps)+',C_eps='+'{0:>1.1e}'.format(c_eps)+'),h_max='+'{0:>1.2e}'.format(h_max)+',dt='+'{0:>1.2e}'.format(dt)+'(C_CFL='+'{0:>1.1e}'.format(c_cfl)+').pdf'
                  },
     )
 
