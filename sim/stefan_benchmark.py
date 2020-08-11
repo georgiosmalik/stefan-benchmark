@@ -100,10 +100,6 @@ DATA_STABILITY={}
 
 # Temporal discretization scheme for EHC model (THETA = 0.5 is Crank-Nicholson)
 THETA=0.5
-
-# TEST (tuning 3d benchmark)
-PROJECT=False
-#---------------------------
 # ===================================
 
 # ------------------------------------------------------
@@ -299,57 +295,6 @@ def stefan_analytic_sol(dim, ploteq=False):
         }
         '''
 
-        # TEST (tuning 3d benchmark)
-        if PROJECT:
-            code_analytic='''
-            #include <pybind11/pybind11.h>
-            #include <pybind11/eigen.h>
-            namespace py = pybind11;
-
-            #include <dolfin/function/Expression.h>
-            #include <dolfin/mesh/MeshFunction.h>
-            #include <math.h>
-            #include <boost/math/special_functions/gamma.hpp>
-            using boost::math::tgamma;
-
-            class StefanAnalytic3d : public dolfin::Expression
-            {
-            public:
-
-              double t, theta_i, theta_m, kappa_l, kappa_s, lambda_, c_3d;
-
-              // Analytical solution, returns one value
-              StefanAnalytic3d() : dolfin::Expression() {};
-              // Function for evaluating expression
-              void eval(Eigen::Ref<Eigen::VectorXd> values, Eigen::Ref<const Eigen::VectorXd> x) const override
-              {
-                double f_l = (x[0]*x[0])/(4*kappa_l*t) ;
-                double f_s = (x[0]*x[0])/(4*kappa_s*t) ;
-                if ( x[0] <= 2*lambda_*sqrt(t) ) {
-                   values[0] = theta_m + c_3d*((-2*tgamma(0.5,f_l) + 2*sqrt(1/f_l)*exp(-f_l))  - (-2*tgamma(0.5,lambda_*lambda_/kappa_l) + 2*sqrt(kappa_l)/lambda_*exp(-lambda_*lambda_/kappa_l)));
-                }
-                else {
-                   values[0] = theta_i - (theta_i - theta_m)/(-2*tgamma(0.5,lambda_*lambda_/kappa_s) + 2*sqrt(kappa_s)/lambda_*exp(-lambda_*lambda_/kappa_s))*(-2*tgamma(0.5,f_s) + 2*sqrt(1/f_s)*exp(-f_s));
-                }
-              }
-            };
-
-            PYBIND11_MODULE(SIGNATURE, m)
-            {
-              py::class_<StefanAnalytic3d, std::shared_ptr<StefanAnalytic3d>, dolfin::Expression>
-                (m, "StefanAnalytic3d")
-                .def(py::init<>())
-                .def_readwrite("kappa_l", &StefanAnalytic3d::kappa_l)
-                .def_readwrite("kappa_s", &StefanAnalytic3d::kappa_s)
-                .def_readwrite("lambda_", &StefanAnalytic3d::lambda_)
-                .def_readwrite("theta_m", &StefanAnalytic3d::theta_m)
-                .def_readwrite("c_3d", &StefanAnalytic3d::c_3d)
-                .def_readwrite("theta_i", &StefanAnalytic3d::theta_i)
-                .def_readwrite("t", &StefanAnalytic3d::t);
-            }
-            '''
-        #---------------------------
-
         # Compile cpp code for dolfin:
         theta_analytic = dolfin.CompiledExpression(dolfin.compile_cpp_code(code_analytic).StefanAnalytic3d(),
                                                    kappa_l=prm.kappa_l,
@@ -467,26 +412,12 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
             # Pocitame na siti, ktera je osminou koule
             return np.cbrt(prm.R2**3-6*vol_ice/np.pi)
 
-        # TEST (tuning 3d benchmark):
-        if PROJECT:
-            def front_pos_3d1d():
-                return prm.R2-vol_ice
-        #----------------------------
-
         switch = {
             1:front_pos_1d,
             2:front_pos_2d,
             3:front_pos_3d
         }
         
-        # TEST (tuning 3d benchmark):
-        if PROJECT:
-            switch = {
-                1:front_pos_1d,
-                2:front_pos_2d,
-                3:front_pos_3d1d
-            }
-        #----------------------------
         return switch.get(DIM)
     
     def stefan_loop():
@@ -501,11 +432,6 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                 i=formulation[BOUNDARY_FORMULATION]
                 
                 q_form = [q_out*theta_test*ds(2),q_in*theta_test*ds(1)][floor(-1.5+i):ceil(0.5+i)]
-
-                # TEST (tuning 3d benchmark)
-                if PROJECT:
-                    q_form = [q_out*theta_test*(prm.R2**2)*ds(2),q_in*theta_test*(prm.R1**2)*ds(1)][floor(-1.5+i):ceil(0.5+i)]
-                #---------------------------
                 
                 bc_form=bc[floor(0+i):ceil(1+i)]
 
@@ -563,12 +489,6 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                     
                     F = k_eff(theta,deg='C0')*dolfin.inner(dolfin.grad(theta),dolfin.grad(theta_))*dx+prm.rho/dt*(THETA*c_p_eff(theta,deg='C0')+(1-THETA)*c_p_eff(theta_k,deg='C0'))*(dolfin.inner(theta,theta_)-dolfin.inner(theta_k, theta_))*dx-sum(q_form)
 
-                    # TEST (tuning 3d benchmark)
-                    if PROJECT:
-                        jr = dolfin.Expression("x[0]*x[0]",domain = mesh, degree=3)
-                        F = k_eff(theta,deg='C0')*dolfin.inner(dolfin.grad(theta),dolfin.grad(theta_))*jr*dx+prm.rho/dt*(THETA*c_p_eff(theta,deg='C0')+(1-THETA)*c_p_eff(theta_k,deg='C0'))*(dolfin.inner(theta,theta_)-dolfin.inner(theta_k, theta_))*jr*dx-sum(q_form)
-                    #---------------------------
-
                     problem = dolfin.NonlinearVariationalProblem(F,theta,bcs=bc_form,J=dolfin.derivative(F,theta))
                     solver = dolfin.NonlinearVariationalSolver(problem)
                     solver.parameters["newton_solver"]=NEWTON_PARAMS
@@ -600,12 +520,6 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
 
                 # Nonlinear formulation:
                 F=k_eff(theta,deg='C0')*dolfin.inner(dolfin.grad(theta),dolfin.grad(theta_))*dx+prm.rho/dt*(c_p_eff(theta,deg='disC')*(theta-prm.theta_m)+s(theta)-c_p_eff(theta_k,deg='disC')*(theta_k-prm.theta_m)-s(theta_k))*theta_*dx-sum(q_form)
-
-                # TEST (tuning 3d benchmark)
-                if PROJECT:
-                    jr = dolfin.Expression("x[0]*x[0]",domain = mesh,degree=3)
-                    F=k_eff(theta,deg='C0')*dolfin.inner(dolfin.grad(theta),dolfin.grad(theta_))*jr*dx+prm.rho/dt*(c_p_eff(theta,deg='disC')*(theta-prm.theta_m)+s(theta)-c_p_eff(theta_k,deg='disC')*(theta_k-prm.theta_m)-s(theta_k))*theta_*jr*dx-sum(q_form)
-                #----------------------------
                 
                 problem = dolfin.NonlinearVariationalProblem(F,theta,bcs=bc_form,J=dolfin.derivative(F,theta))
                 solver = dolfin.NonlinearVariationalSolver(problem)
@@ -971,18 +885,7 @@ def stefan_benchmark():
     # find lambda and return analytic solution:
     (lambda_,theta_analytic,q_in,q_out)=stefan_analytic_sol(DIM)()
     # do the computation:
-    stefan_benchmark_sim(mesh,boundary,n,dx,ds,lambda_,theta_analytic,q_in,q_out,METHODS)()
-
-# TEST (tuning 3d benchmark)
-def stefan_projection():
-    # preprocessing:
-    (mesh,boundary,n,dx,ds)=smsh.stefan_mesh(1)()
-    # find lambda and return analytic solution:
-    (lambda_,theta_analytic,q_in,q_out)=stefan_analytic_sol(DIM)()
-    # do the computation:
-    stefan_benchmark_sim(mesh,boundary,n,dx,ds,lambda_,theta_analytic,q_in,q_out,['EHC','TTM'])()
-#---------------------------
-    
+    stefan_benchmark_sim(mesh,boundary,n,dx,ds,lambda_,theta_analytic,q_in,q_out,METHODS)()    
 
 # Convergence simulation:
 def stefan_convergence():
