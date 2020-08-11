@@ -34,12 +34,24 @@ linestyle={"analytic":{"color":mplt.mypalette[0],
 }
 
 def load_data():
+    
     global DATA_PY
-    DATA_PY=np.load('./out/data/'+str(DIM)+'d/data.npy',allow_pickle='TRUE').item()
+
+    try:
+        DATA_PY=np.load('./out/data/'+str(DIM)+'d/data.npy',allow_pickle='TRUE').item()
+    except FileNotFoundError:
+        print("Benchmark data file N/A, run benchmark first.")
 
 def load_data_stability():
+    
     global DATA_STABILITY
-    DATA_STABILITY=np.load('./out/data/'+str(DIM)+'d/data_stability.npy',allow_pickle='TRUE').item()
+
+    try:
+        DATA_STABILITY = np.load('./out/data/'+str(DIM)+'d/data_stability.npy',allow_pickle='TRUE').item()
+    except FileNotFoundError:
+        print("Stability data file N/A, run stability first.")
+
+    return DATA_STABILITY
 
 def graph_temp():
 
@@ -274,9 +286,53 @@ def graph_front_vel(interpolation=True, curvefit=False):
                  },
     )
 
-def graph_stability():
+def graph_stability1p():
 
-    data=DATA_STABILITY
+    data=DATA_STABILITY['1p']
+
+    for method in data:
+
+        X = list(map(float,list(data[method].keys())))
+
+        X_C_eps = []
+        
+        fp_err = []
+        l2_err = []
+        linf_err = []
+
+        for eps in X:
+
+            X_C_eps.append(data[method][eps]["C_eps"])
+            
+            fp_err.append(data[method][eps]["fp_err"])
+            l2_err.append(data[method][eps]["l2_err"])
+            linf_err.append(data[method][eps]["linf_err"])
+
+        fig, ax = plt.subplots(1,1)
+        ax.plot(X,fp_err, label = r'$\Delta s_{\mathrm{r}}$')
+        ax.plot(X,l2_err, label = r'$\|\theta-\theta_h\|_{L^2}/\|\theta\|_{L^2}$')
+        ax.plot(X,linf_err, label = r'$\|\theta-\theta_h\|_{L^\infty}/\|\theta\|_{L^\infty}$')
+        ax.set_xlabel(r"$\epsilon\,[K]$")
+        ax.invert_xaxis()
+
+        ax.set_yscale('log')
+
+        ax.legend()
+        
+        fig.set_size_inches(mplt.set_size(345/2.,ratio=1),forward=True)
+        
+        fig.savefig('./out/fig/'+str(DIM)+'d/stability1p_'+method+'.pdf',
+                    format='pdf',
+                    bbox_inches='tight',
+                    transparent=True
+        )
+        
+
+        
+
+def graph_stability2p():
+
+    data=DATA_STABILITY['2p']
 
     # Set colormap for stability graph:
     def cmp_(k,method):
@@ -415,7 +471,7 @@ def graph_stability():
 
         fig.set_size_inches(mplt.set_size(345/2.,ratio=1),forward=True)
         
-        fig.savefig('./out/fig/'+str(DIM)+'d/stability_'+method+'.pdf',
+        fig.savefig('./out/fig/'+str(DIM)+'d/stability2p_'+method+'.pdf',
                     format='pdf',
                     #bbox_inches='tight',
                     transparent=True

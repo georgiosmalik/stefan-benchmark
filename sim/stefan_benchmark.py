@@ -87,18 +87,14 @@ NEWTON_PARAMS.add("maximum_iterations",25)
 # Specify data output
 GRAPH = False
 SAVE_DAT = False
-TEMP_TXT_DAT = False
+TEMP_TXT_DAT = True
 SAVE_FRONT_POS_TXT = True
 
 # Types of simulation
-BENCHMARK = False
 CONVERGENCE = False
 STABILITY = False
 
-# Data for stability testing:
-DATA_STABILITY={}
-
-# Temporal discretization scheme for EHC model (THETA = 0.5 is Crank-Nicholson)
+# Temporal discretization scheme for EHC model (THETA = 0.5 is Crank-Nicholson, THETA=1 is fully implicit)
 THETA=0.5
 # ===================================
 
@@ -339,10 +335,8 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
     rank=dolfin.MPI.rank(mesh.mpi_comm())
 
     # Mesh parameters:
-    global hmin
     hmin = dolfin.MPI.min(mesh.mpi_comm(),mesh.hmin())
     
-    global hmax
     hmax = dolfin.MPI.max(mesh.mpi_comm(),mesh.hmax())
     
     def stefan_loop_timesets():
@@ -352,13 +346,17 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
         t_max=(R_END/(2*lambda_))**2
 
         # Set timestep based on standart CFL condition:
-
-        # Maximal velocity of melting front:
-        vmax=lambda_/np.sqrt(t_0)
-
-        if BENCHMARK:
+        if not ('dt' in globals()):
+            
+            # Maximal velocity of melting front:
+            vmax=lambda_/np.sqrt(t_0)
+            
             global dt
             dt = em.get_delta_t_cfl(hmin, vmax)
+
+        # Save dt for stability1p data:
+        try:
+            
 
         # Set timeset for simulation
         sim_timeset=np.arange(t_0,t_max,dt)
@@ -617,6 +615,7 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
 
         # Get h_eps bound
         theta_0 = dolfin.project(theta_analytic,T,solver_type="cg",preconditioner_type="hypre_amg")
+        global h_eps
         h_eps = em.get_h_eps(theta_0)
         
         # Into hdf file
@@ -634,9 +633,7 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
             # Temperature mollification parameters:
             data_hdf.write(dolfin.project(float(em.EPS),T,solver_type="cg",preconditioner_type="hypre_amg"),"eps")
             data_hdf.write(dolfin.project(h_eps,T,solver_type="cg",preconditioner_type="hypre_amg"),"h_eps")
-            data_hdf.write(dolfin.project(em.C_EPS,T,solver_type="cg",preconditioner_type="hypre_amg"),"C_eps")
-            
-            
+            data_hdf.write(dolfin.project(em.C_EPS,T,solver_type="cg",preconditioner_type="hypre_amg"),"C_eps")            
 
         # Into numpy dict
         
@@ -668,9 +665,6 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
               "======================\n",
         )
         
-        
-        index=0
-        
         # Time loop: 
         for t in np.nditer(sim_timeset):
             
@@ -690,6 +684,14 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                 
                 sim[method][0].solve()
                 sim[method][2].assign(sim[method][1])
+
+                # TEST mollified params:
+                if method == 'EHC':
+                    dolfin.plot(c_p_eff(sim[method][1]))
+                elif method == 'TTM':
+                    dolfin.plot(c_p_eff(sim[method][1], deg = 'disC'))
+                    dolfin.plot(s(dolfin.plot(c_p_eff(sim[method][1]))))
+                # ------------------
 
                 # Front position calculation and export:
                 front_position=stefan_front_position(sim[method][1])()
@@ -853,8 +855,18 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
 
         # Stability data:
         if STABILITY and sim:
-            theta_analytic_proj=dolfin.project(theta_analytic,sim[method][1].function_space(),solver_type="cg",preconditioner_type="hypre_amg")
+
             h=1/mesh.num_cells()
+            eps = float(em.EPS)
+
+            # Save discretization parameters:
+            if not DATA_STABILITY['2p']['disc_params']:
+                DATA_STABILITY['2p']['disc_params']['eps'] = eps
+            elif not DATA_STABILITY['1p']['disc_params']:
+                DATA_STABILITY['1p']['disc_params']['h'] = h
+                DATA_STABILITY['1p']['disc_params']['dt'] = dt
+            
+            theta_analytic_proj=dolfin.project(theta_analytic,sim[method][1].function_space(),solver_type="cg",preconditioner_type="hypre_amg")
             for method in sim:
                 fp=data_py["front_pos"][method][-1]
                 fp_err=abs(front_position-2*lambda_*np.sqrt(sim_timeset[-1]))/(2*lambda_*np.sqrt(sim_timeset[-1]))
@@ -862,10 +874,15 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                 l2_err=dolfin.errornorm(theta_analytic_proj,sim[method][1],norm_type='L2')/dolfin.norm(theta_analytic_proj)
                 
                 linf_err=dolfin.norm(theta_analytic_proj.vector()-sim[method][1].vector(),'linf')/dolfin.norm(theta_analytic_proj.vector(),'linf')
-                
-                DATA_STABILITY[h][int(dt)][method]["fp_err"]=fp_err
-                DATA_STABILITY[h][int(dt)][method]["l2_err"]=l2_err
-                DATA_STABILITY[h][int(dt)][method]["linf_err"]=linf_err
+            try:    
+                DATA_STABILITY['2p'][h][int(dt)][method]["fp_err"]=fp_err
+                DATA_STABILITY['2p'][h][int(dt)][method]["l2_err"]=l2_err
+                DATA_STABILITY['2p'][h][int(dt)][method]["linf_err"]=linf_err
+            except KeyError:
+                DATA_STABILITY['1p'][method][eps]["C_eps"]=h/h_eps
+                DATA_STABILITY['1p'][method][eps]["fp_err"]=fp_err
+                DATA_STABILITY['1p'][method][eps]["l2_err"]=l2_err
+                DATA_STABILITY['1p'][method][eps]["linf_err"]=linf_err
         #==========================================================
         if SAVE_DAT:
             data_hdf.close()
@@ -880,15 +897,19 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
 
 # Benchmark simulation:
 def stefan_benchmark():
-    # preprocessing:
+    
+    # Preprocessing:
     (mesh,boundary,n,dx,ds)=smsh.stefan_mesh(DIM)()
-    # find lambda and return analytic solution:
+    
+    # Find analytic solution and lambda:
     (lambda_,theta_analytic,q_in,q_out)=stefan_analytic_sol(DIM)()
-    # do the computation:
+    
+    # Compute FEM simulation:
     stefan_benchmark_sim(mesh,boundary,n,dx,ds,lambda_,theta_analytic,q_in,q_out,METHODS)()    
 
 # Convergence simulation:
 def stefan_convergence():
+    
     meshres={
     1:[100,1000,10000],
     2:[25],
@@ -914,21 +935,74 @@ def stefan_convergence():
         em.EPS.assign(50./(10**(i+1)))
         stefan_benchmark()
 
-# Stability benchmark:
-def stefan_stability():
+# One-parametric 1d stability benchmark:
+def stability1p():
+
+    global DATA_STABILITY    
+    DATA_STABILITY = splt.load_data_stability()
+
+    # Prepare data structure for one-parametric stability
+    DATA_STABILITY['1p'] = {}
+    DATA_STABILITY['1p']['disc_params'] = {}
+
+    h = 1/prm.meshres[DIM]
+
+    # Make sure data for 2p stability will not be overwritten
+    backup = DATA_STABILITY['2p'].pop(h, None)
+
+    eps_range = [5., 4., 3., 2., 1.75, 1.5, 1.25, 1., 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0.09, 0.08, 0.07, 0.06, 0.05, 0.04, 0.03, 0.02, 0.01]
+
+    for method in ['EHC','TTM']:
+
+        global METHODS
+        METHODS = [method]
+
+        DATA_STABILITY['1p'][method] = {}
+        
+        for eps in eps_range:
+
+            # Prepare dict for data output
+            DATA_STABILITY['1p'][method][eps] = {}
+
+            # Assign new value of epsilon
+            em.EPS.assign(eps)
+
+            # Compute benchmark problem for each method separately
+            try:
+                stefan_benchmark()
+            except RuntimeError:
+                DATA_STABILITY['1p'][method][eps]["C_eps"]=h/h_eps
+                DATA_STABILITY['1p'][method][eps]["fp_err"]=1
+                DATA_STABILITY['1p'][method][eps]["l2_err"]=1
+                DATA_STABILITY['1p'][method][eps]["linf_err"]=1
+
+    if backup:
+        DATA_STABILITY['2p'][h] = backup
+            
+    # Save stability data for postprocessing:
+    if rank==0:
+        np.save('./out/data/'+str(DIM)+'d/data_stability.npy', DATA_STABILITY) 
+
+    
+        
+# Two-parametric stability benchmark:
+def stability2p():
     # pro pevne epsilon napocita chyby pozice fronty pro prislusne volby casoveho kroku a prostoroveho kroku
 
     global DATA_STABILITY
+    DATA_STABILITY = splt.load_data_stability()
+
+    # Prepare data structure for one-parametric stability
+    DATA_STABILITY['2p'] = {}
+    DATA_STABILITY['2p']['disc_params'] = {}
+    
 
     global METHODS
-
-    # Compute with fixed epsilon:
-    em.EPS.assign(1.25)
 
     # for eps=5.0 is h_opt=1/100, deltat_opt=25000
 
     meshres=[1e1,2.5e1,5e1,7.5e1,1e2,2.5e2,5e2,7.5e2,1e3,2.5e3,5e3,7.5e3,1e4]
-    timesteps=[1e2,2.5e2,5e2,7.5e2,1e3,2.5e3,5e3,7.5e3,1e4,2.5e4,5e4,7.5e4,1e5]
+    timesteps=[1e2,2.5e2,5e2,7.5e2,1e3,2.5e3,5e3,7.5e3,1e4,2.5e4,5e4,7.e4,1e5]
 
     meshres=[]
     timesteps=[]
@@ -952,9 +1026,9 @@ def stefan_stability():
                 try:
                     stefan_benchmark()
                 except RuntimeError:
-                    DATA_STABILITY[1/nx][dt][method]["fp_err"]=1
-                    DATA_STABILITY[1/nx][dt][method]["l2_err"]=1
-                    DATA_STABILITY[1/nx][dt][method]["linf_err"]=1
+                    DATA_STABILITY['2p'][1/nx][dt][method]["fp_err"]=1
+                    DATA_STABILITY['2p'][1/nx][dt][method]["l2_err"]=1
+                    DATA_STABILITY['2p'][1/nx][dt][method]["linf_err"]=1
 
     # Save stability data for postprocessing:
     if rank==0:

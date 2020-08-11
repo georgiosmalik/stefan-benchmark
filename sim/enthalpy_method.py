@@ -18,7 +18,7 @@ from ufl import tanh
 # Global parameters of enthalpy method
 # ------------------------------------
 
-# Temperature mollification parameter
+# Temperature mollification parameter (default EPS = 0.5)
 EPS = dolfin.Constant(0.5)
 
 # Relaxation parameter for optimal space discretization bound

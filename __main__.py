@@ -27,7 +27,7 @@ if __name__ == "__main__":
     try:
         dim=int(sys.argv[-1][0])
     except ValueError:
-        print("Dimension not specified, running "+str(sys.argv[-1])+" 1d.")
+        print("Dimension set to d=1, running "+str(sys.argv[-1])+" 1d.")
         dim=1
 
     # Creates directories for output:
@@ -54,11 +54,17 @@ if __name__ == "__main__":
         sim.stefan_benchmark.CONVERGENCE=True
         sim.stefan_benchmark.stefan_convergence()
         
-    elif "stability" in sys.argv:
+    elif "stability-1p" in sys.argv:
         
-        # Run stability:
+        # Run one-parametric stability benchmark:
         sim.stefan_benchmark.STABILITY=True
-        sim.stefan_benchmark.stefan_stability()
+        sim.stefan_benchmark.stability1p()
+
+    elif "stability-2p" in sys.argv:
+        
+        # Run two-parametric stability benchmark:
+        sim.stefan_benchmark.STABILITY=True
+        sim.stefan_benchmark.stability2p()
         
     elif "postprocessing-benchmark" in sys.argv:
         
@@ -68,11 +74,17 @@ if __name__ == "__main__":
         sim.stefan_benchmark.splt.graph_front_pos()
         sim.stefan_benchmark.splt.graph_front_vel()
 
-    elif "postprocessing-stability" in sys.argv:
+    elif "postprocessing-stability-1p" in sys.argv:
 
         # Run postprocessing (stability data):
         sim.stefan_benchmark.splt.load_data_stability()
-        sim.stefan_benchmark.splt.graph_stability()
+        sim.stefan_benchmark.splt.graph_stability1p()
+
+    elif "postprocessing-stability-2p" in sys.argv:
+
+        # Run postprocessing (stability data):
+        sim.stefan_benchmark.splt.load_data_stability()
+        sim.stefan_benchmark.splt.graph_stability2p()
 
     elif "preprocessing" in sys.argv:
 
@@ -84,10 +96,8 @@ if __name__ == "__main__":
         # nize se nastavuji konstanty ktere ovlivnuji vypocet (prvni souvisi s casovym krokem, druhe s sirkou mushy regionu, treti s prostorovou diskretizace, ta treti ted koresponduje s 1d variantou, zbyle jsou univerzalni)
         
         # Run simulation:
-        sim.stefan_benchmark.BENCHMARK=True
-        
         sim.stefan_benchmark.GRAPH=False
-        sim.stefan_benchmark.SAVE_DAT=True
+        sim.stefan_benchmark.SAVE_DAT=False
         
         solvestart = time.time()
         sim.stefan_benchmark.stefan_benchmark()
