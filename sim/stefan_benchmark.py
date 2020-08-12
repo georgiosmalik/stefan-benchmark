@@ -355,7 +355,9 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
     def stefan_loop_timesets():
 
         # Set start and end time of simulation
+        global t_0
         t_0=(R_START/(2*lambda_))**2
+        
         t_max=(R_END/(2*lambda_))**2
 
         # Set timestep based on standart CFL condition:
@@ -368,7 +370,7 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
             dt = em.get_delta_t_cfl(hmin, vmax)
 
         # Set timeset for simulation
-        sim_timeset=np.arange(t_0,t_max,dt)
+        sim_timeset=np.arange(t_0,t_max,dt)[1:]
 
         # Set timeset for data output
         numdats=100
@@ -456,35 +458,6 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
 
             def c_p_eff(theta,deg=em.DEG):
                     return em.mollify(prm.cp_s,prm.cp_l,theta,x0=prm.theta_m,deg=deg)+em.dirac(prm.L_m,theta,x0=prm.theta_m,deg=deg)
-                
-            def stefan_form_em(nonlinear=NONLINEAR):
-                # Vrat formulaci pro enthalpy method
-                
-                # Definuj prostor funkci:
-                (T,bcs,theta,_theta,theta_)=stefan_function_spaces()
-                
-                # Nastav poc. podminku:
-                theta_k=dolfin.project(theta_analytic,T,solver_type="cg",preconditioner_type="hypre_amg")
-
-                q_form, q_form_k, bc_form=stefan_boundary_values(theta_,bcs)
-
-                # Nonlinear formulation:
-                if nonlinear:
-                    
-                    F = k_eff(theta,deg='Cinf')*dolfin.inner(dolfin.grad(theta),dolfin.grad(theta_))*dx+prm.rho/dt*c_p_eff(theta,deg='Cinf')*(dolfin.inner(theta,theta_)-dolfin.inner(theta_k, theta_))*dx-sum(q_form)
-
-                    problem = dolfin.NonlinearVariationalProblem(F,theta,bcs=bc_form,J=dolfin.derivative(F,theta))
-                    solver = dolfin.NonlinearVariationalSolver(problem)
-                    solver.parameters["newton_solver"]=NEWTON_PARAMS
-
-                    return solver, theta, theta_k
-                    
-                # Linear formulation:
-                F = k_eff(theta_k)*dolfin.inner(dolfin.grad(_theta), dolfin.grad(theta_))*dx+prm.rho*c_p_eff(theta_k)/dt*(dolfin.inner(_theta, theta_) - dolfin.inner(theta_k, theta_))*dx - sum(q_form)
-                problem = dolfin.LinearVariationalProblem(dolfin.lhs(F),dolfin.rhs(F),theta,bc_form)
-                solver = dolfin.LinearVariationalSolver(problem)
-                
-                return solver, theta, theta_k
 
             def stefan_form_ehc(nonlinear=NONLINEAR):
                 # Vrat formulaci pro equivalent heat method
@@ -497,22 +470,21 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
 
                 q_form, q_form_k, bc_form=stefan_boundary_values(theta_,bcs)
 
-                # Nonlinear formulation:
-                if nonlinear:
-                    
-                    F = (THETA*k_eff(theta,deg='C0')*dolfin.inner(dolfin.grad(theta),dolfin.grad(theta_))+(1-THETA)*k_eff(theta_k,deg='C0')*dolfin.inner(dolfin.grad(theta_k),dolfin.grad(theta_)))*dx+prm.rho/dt*(THETA*c_p_eff(theta,deg='C0')+(1-THETA)*c_p_eff(theta_k,deg='C0'))*(dolfin.inner(theta,theta_)-dolfin.inner(theta_k, theta_))*dx-(THETA*sum(q_form)+(1-THETA)*sum(q_form_k))
+                # Partial THETA time discretization scheme:
+                # F = (k_eff(theta, deg = 'C0')*dolfin.inner(dolfin.grad(theta), dolfin.grad(theta_))*dx +
+                #      prm.rho/dt*(THETA*c_p_eff(theta,deg='C0')+(1-THETA)*c_p_eff(theta_k,deg='C0'))*(dolfin.inner(theta,theta_)-dolfin.inner(theta_k, theta_))*dx - sum(q_form))
 
-                    problem = dolfin.NonlinearVariationalProblem(F,theta,bcs=bc_form,J=dolfin.derivative(F,theta))
-                    solver = dolfin.NonlinearVariationalSolver(problem)
-                    solver.parameters["newton_solver"]=NEWTON_PARAMS
-                    
-                    return solver, theta, theta_k    
+                # Full THETA time discretization scheme:
+                F = (THETA*(k_eff(theta, deg = 'C0')*dolfin.inner(dolfin.grad(theta), dolfin.grad(theta_))*dx +
+                            prm.rho/dt*c_p_eff(theta,deg='C0')*(dolfin.inner(theta,theta_)-dolfin.inner(theta_k,theta_))*dx - sum(q_form)) +
+                     (1-THETA)*(k_eff(theta_k, deg = 'C0')*dolfin.inner(dolfin.grad(theta_k), dolfin.grad(theta_))*dx +
+                                prm.rho/dt*c_p_eff(theta_k,deg='C0')*(dolfin.inner(theta, theta_) - dolfin.inner(theta_k,theta_))*dx - sum(q_form_k)))
 
-                F = k_eff(theta_k,deg='C0')*dolfin.inner(dolfin.grad(_theta), dolfin.grad(theta_))*dx+prm.rho*c_p_eff(theta_k,deg='disC')/dt*(dolfin.inner(_theta, theta_) - dolfin.inner(theta_k, theta_))*dx - sum(q_form)
-                
-                problem = dolfin.LinearVariationalProblem(dolfin.lhs(F),dolfin.rhs(F),theta,bc_form)
-                solver = dolfin.LinearVariationalSolver(problem)
-                
+                problem = dolfin.NonlinearVariationalProblem(F,theta,bcs=bc_form,J=dolfin.derivative(F,theta))
+                    
+                solver = dolfin.NonlinearVariationalSolver(problem)
+                solver.parameters["newton_solver"]=NEWTON_PARAMS
+                    
                 return solver, theta, theta_k
 
             def stefan_form_cao(nonlinear=True):
@@ -532,8 +504,13 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                     return dolfin.conditional(abs(theta-theta0)<eps,prm.cp_m*eps + prm.L_m/2,dolfin.conditional(theta>theta0,prm.cp_s*eps+prm.L_m,prm.cp_s*eps))
 
                 # Nonlinear formulation:
-                F=k_eff(theta,deg='C0')*dolfin.inner(dolfin.grad(theta),dolfin.grad(theta_))*dx+prm.rho/dt*(c_p_eff(theta,deg='disC')*(theta-prm.theta_m)+s(theta)-c_p_eff(theta_k,deg='disC')*(theta_k-prm.theta_m)-s(theta_k))*theta_*dx-sum(q_form)
-                
+
+                # Fully implicit time discretization scheme
+                F = k_eff(theta,deg='C0')*dolfin.inner(dolfin.grad(theta),dolfin.grad(theta_))*dx+prm.rho/dt*(c_p_eff(theta,deg='disC')*(theta-prm.theta_m)+s(theta)-c_p_eff(theta_k,deg='disC')*(theta_k-prm.theta_m)-s(theta_k))*theta_*dx-sum(q_form)
+
+                # Full THETA time dicretization scheme
+                # F = prm.rho/dt*(c_p_eff(theta,deg='disC')*(theta - prm.theta_m) + s(theta) - c_p_eff(theta_k,deg='disC')*(theta_k - prm.theta_m) - s(theta_k))*theta_*dx + (THETA*(k_eff(theta,deg='C0')*dolfin.inner(dolfin.grad(theta),dolfin.grad(theta_))*dx - sum(q_form)) + (1-THETA)*(k_eff(theta_k,deg='C0')*dolfin.inner(dolfin.grad(theta_k),dolfin.grad(theta_))*dx - sum(q_form_k)))
+    
                 problem = dolfin.NonlinearVariationalProblem(F,theta,bcs=bc_form,J=dolfin.derivative(F,theta))
                 solver = dolfin.NonlinearVariationalSolver(problem)
                 solver.parameters["newton_solver"]=NEWTON_PARAMS
@@ -541,18 +518,17 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                 return solver, theta, theta_k
             
             methodswitch = {
-                'EHCreg':stefan_form_em,
                 'EHC':stefan_form_ehc,
                 'TTM':stefan_form_cao
             }
-            return methodswitch.get(method,method+" is not implemented. Consider 'EHCreg', 'EHC', or 'TTM'.")
+            return methodswitch.get(method,method+" is not implemented. Consider 'EHC', or 'TTM'.")
 
         # Set timesets for simulation, data output and plotting
         sim_timeset, dat_timeset, plot_timeset=stefan_loop_timesets()
 
         # Set data for initial step
-        theta_analytic.t=sim_timeset[0]
-        stefan_form_update_previous(sim_timeset[0])
+        theta_analytic.t = t_0
+        stefan_form_update_previous(t_0)
         
         # Dictionary sim contains forms for particular methods:
         sim={}
@@ -686,7 +662,7 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
         index = 0
         
         # Time loop: 
-        for t in np.nditer(sim_timeset[1:]):
+        for t in np.nditer(sim_timeset):
             
             # Update problem to current time level:
             stefan_form_update(t)

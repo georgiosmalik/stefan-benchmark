@@ -166,6 +166,8 @@ def graph_front_pos(offset=False,ls=False):
     legend=['analytic']
 
     tau=timeset[-1]-timeset[0]
+
+    # We compute with a fixed timestep
     timestep=timeset[1]-timeset[0]
     
     for method in methods:
