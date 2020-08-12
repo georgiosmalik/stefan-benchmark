@@ -873,9 +873,9 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                 
                 linf_err=dolfin.norm(theta_analytic_proj.vector()-sim[method][1].vector(),'linf')/dolfin.norm(theta_analytic_proj.vector(),'linf')
             try:    
-                DATA_STABILITY['2p'][h][int(dt)][method]["fp_err"]=fp_err
-                DATA_STABILITY['2p'][h][int(dt)][method]["l2_err"]=l2_err
-                DATA_STABILITY['2p'][h][int(dt)][method]["linf_err"]=linf_err
+                DATA_STABILITY['2p'][method][h][int(dt)]["fp_err"]=fp_err
+                DATA_STABILITY['2p'][method][h][int(dt)]["l2_err"]=l2_err
+                DATA_STABILITY['2p'][method][h][int(dt)]["linf_err"]=linf_err
             except KeyError:
                 DATA_STABILITY['1p'][method][eps]["C_eps"]=h/h_eps
                 DATA_STABILITY['1p'][method][eps]["fp_err"]=fp_err
@@ -945,15 +945,15 @@ def stability1p():
 
     h = 1/prm.meshres[DIM]
 
-    # Make sure data for 2p stability will not be overwritten
-    backup = DATA_STABILITY['2p'].pop(h, None)
-
     eps_range = [5., 4., 3., 2., 1.75, 1.5, 1.25, 1., 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0.09, 0.08, 0.07, 0.06, 0.05, 0.04, 0.03, 0.02, 0.01]
 
     for method in ['EHC','TTM']:
 
         global METHODS
         METHODS = [method]
+
+        # Make sure data for 2p stability will not be overwritten
+        backup = DATA_STABILITY['2p'][method].pop(h, None)
 
         DATA_STABILITY['1p'][method] = {}
         
@@ -974,8 +974,9 @@ def stability1p():
                 DATA_STABILITY['1p'][method][eps]["l2_err"]=1
                 DATA_STABILITY['1p'][method][eps]["linf_err"]=1
 
-    if backup:
-        DATA_STABILITY['2p'][h] = backup
+        # Return data backup to 2p stability data structure
+        if backup:
+            DATA_STABILITY['2p'][method][h] = backup
             
     # Save stability data for postprocessing:
     if rank==0:
@@ -993,7 +994,6 @@ def stability2p():
     # Prepare data structure for one-parametric stability
     DATA_STABILITY['2p'] = {}
     DATA_STABILITY['2p']['disc_params'] = {}
-    
 
     global METHODS
 
@@ -1009,24 +1009,40 @@ def stability2p():
         timesteps=np.append(timesteps,np.linspace(10**(n+1),9*10**(n+1),9))
     meshres=np.append(meshres,1e4)
     timesteps=np.append(timesteps,1e5)
-    
-    for nx in meshres:
-        prm.meshres[DIM]=int(nx)
-        DATA_STABILITY[1/nx]={}
-        for deltat in timesteps:
-            global dt
-            dt = deltat
-            DATA_STABILITY[1/nx][dt]={}
-            for method in ['EHC','TTM']:
-                DATA_STABILITY[1/nx][dt][method]={}
-                global METHODS
-                METHODS=[method]
+
+    meshres = [1e2]
+    timesteps = [1e3]
+
+    for method in ['EHC','TTM']:
+
+        global METHODS
+        METHODS = [method]
+
+        DATA_STABILITY['2p'][method] = {}
+        
+        for nx in meshres:
+
+            # Set new value of meshres
+            prm.meshres[DIM]=int(nx)
+
+            # Prepare dict for data output
+            DATA_STABILITY['2p'][method][1/nx] = {}
+
+            for deltat in timesteps:
+
+                # Set new value of timestep
+                global dt
+                dt = deltat
+
+                # Prepare dist for data output
+                DATA_STABILITY['2p'][method][1/nx][dt] = {}
+
                 try:
                     stefan_benchmark()
                 except RuntimeError:
-                    DATA_STABILITY['2p'][1/nx][dt][method]["fp_err"]=1
-                    DATA_STABILITY['2p'][1/nx][dt][method]["l2_err"]=1
-                    DATA_STABILITY['2p'][1/nx][dt][method]["linf_err"]=1
+                    DATA_STABILITY['2p'][method][1/nx][dt]["fp_err"]=1
+                    DATA_STABILITY['2p'][method][1/nx][dt]["l2_err"]=1
+                    DATA_STABILITY['2p'][method][1/nx][dt]["linf_err"]=1
 
     # Save stability data for postprocessing:
     if rank==0:
