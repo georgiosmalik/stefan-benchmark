@@ -96,7 +96,6 @@ if __name__ == "__main__":
         # nize se nastavuji konstanty ktere ovlivnuji vypocet (prvni souvisi s casovym krokem, druhe s sirkou mushy regionu, treti s prostorovou diskretizace, ta treti ted koresponduje s 1d variantou, zbyle jsou univerzalni)
         
         # Run simulation:
-        sim.stefan_benchmark.GRAPH=False
         sim.stefan_benchmark.SAVE_DAT=False
         
         solvestart = time.time()

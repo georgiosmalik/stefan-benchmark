@@ -219,60 +219,44 @@ def graph_front_pos(offset=False,ls=False):
                  ylim={"bottom":0.},
                  savefig={"width":345./2,"name":'./out/fig/'+str(DIM)+'d/front_pos_(eps='+'{0:>1.1e}'.format(eps)+'(h_eps='+'{0:>1.2e}'.format(h_eps)+',C_eps='+'{0:>1.1e}'.format(c_eps)+'),h_max='+'{0:>1.2e}'.format(h_max)+',dt='+'{0:>1.2e}'.format(dt)+'(C_CFL='+'{0:>1.1e}'.format(c_cfl)+').pdf'},)
 
-def graph_front_vel(interpolation=True, curvefit=False):
+def graph_front_vel():
 
     data=DATA_PY
 
+    # Load parameters of computation
     lambda_=data["problem_params"]["lambda"]
-    timeset=data["problem_params"]["sim_timeset"]
-    methods=list(data["front_pos"].keys())
-    
-    plot_data=[[timeset,lambda_/np.sqrt(timeset)]]
-    legend=['analytic']
 
-    tau=timeset[-1]-timeset[0]
-    timestep=timeset[1]-timeset[0]
-
-    # Curve fit model:
-    def f(x,a,b):
-        return a/np.sqrt(x)+b
-
-    # Interpolation
-    if interpolation:
-        for method in methods:
-            front_positions=data["front_pos"][method]
-            pos_spline = CubicSpline(timeset[::50], front_positions[::50])
-            vel_spline = pos_spline(timeset[::50], 1)
-            vel_spline = pos_spline.derivative()
-        
-            plot_data.append([timeset,vel_spline(timeset)])
-            legend.append(method)
-    # Curve fitting:
-    elif curvefit:
-        for method in methods:
-            front_positions=data["front_pos"][method]
-            # curve fit
-            c_fit=curve_fit(f,timeset[1:],(np.asarray(front_positions[1:])-np.asarray(front_positions[:-1]))/timestep)
-        
-            plot_data.append([timeset,c_fit[0][0]/np.sqrt(timeset)+c_fit[0][1]])
-            legend.append(method)
-    else:
-        for method in methods:
-            front_positions=data["front_pos"][method];
-    
-            plot_data.append([timeset[1:],(np.asarray(front_positions[1:])-np.asarray(front_positions[:-1]))/timestep])
-            legend.append(method)
-            
-    # Save the figure:
     h_max=data["disc_params"]["h_max"]
     
     eps=data["disc_params"]["eps"]
     h_eps=data["disc_params"]["h_eps"]
     c_eps=data["disc_params"]["C_eps"]
-    
+
+    timeset=data["problem_params"]["sim_timeset"]
     dt=data["disc_params"]["dt"]
     c_cfl=data["disc_params"]["C_CFL"]
+    
+    tau=timeset[-1]-timeset[0]
+    
+    methods=list(data["front_pos"].keys())
+    
+    plot_data=[[timeset,lambda_/np.sqrt(timeset)]]
+    legend=['analytic']
+
+    for method in methods:
+        
+        front_positions=data["front_pos"][method]
+
+        spline_every = 50
+        pos_spline = CubicSpline(timeset[::spline_every], front_positions[::spline_every])
+        
+        vel_spline = pos_spline(timeset, 1)
+        vel_spline = pos_spline.derivative()
+        
+        plot_data.append([timeset,vel_spline(timeset)])
+        legend.append(method)
             
+    # Save the figure:
     mplt.graph1d(plot_data,
                  color=2*mplt.mypalette[:len(methods)+1],
                  legend=legend,
@@ -338,9 +322,6 @@ def graph_stability1p():
                     transparent=True
         )
         
-
-        
-
 def graph_stability2p():
 
     data=DATA_STABILITY['2p']

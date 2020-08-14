@@ -85,7 +85,6 @@ NEWTON_PARAMS.add("absolute_tolerance",1e-5)
 NEWTON_PARAMS.add("maximum_iterations",25)
 
 # Specify data output
-GRAPH = False
 SAVE_DAT = False
 TEMP_TXT_DAT = True
 SAVE_FRONT_POS_TXT = True
@@ -665,8 +664,11 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
         )
 
         index = 0
+
+        # ---------
+        # Time loop
+        # ---------
         
-        # Time loop: 
         for t in np.nditer(sim_timeset):
             
             # Update problem to current time level:
@@ -807,22 +809,6 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
         # Save data dictionary for postprocessing:
         if rank==0:
             np.save('./out/data/'+str(DIM)+'d/data.npy', data_py)
-        #----------------------
-        # Visual postprocessing
-        #======================
-
-        # 1d graphs:
-        if GRAPH and rank==0:
-            splt.load_data()
-            
-            # Graph temp distribution along ray from origin:
-            splt.graph_temp()
-            
-            # Graph position of the melting front:
-            splt.graph_front_pos()
-
-            # Graph velocity of the melting front:
-            splt.graph_front_vel()
         
         # Convergence data:
         if CONVERGENCE and sim:
