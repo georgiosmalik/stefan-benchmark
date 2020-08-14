@@ -29,7 +29,7 @@ DEG = 'Cinf'
 # ====================================
 
 # CFL condition relaxation parameter
-C_CFL = 1.
+C_CFL = 0.2
 
 # -----------------------------------------
 # Numerical approximations of distributions
@@ -186,7 +186,7 @@ def get_h_eps(theta, projection = 'local', analytic = False):
 
     def norm_theta_grad_local():
 
-        delta_local = 1.
+        delta_local = 1.5
         
         local_proj = dolfin.conditional(abs(theta-prm.theta_m)<delta_local,1.,0.)
         

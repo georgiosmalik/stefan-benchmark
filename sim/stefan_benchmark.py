@@ -607,10 +607,15 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
         # Save discretization parameters
         # ------------------------------
 
-        # Get h_eps bound
+        # Get h_eps and dt_cfl bound
         theta_0 = dolfin.project(theta_analytic,T,solver_type="cg",preconditioner_type="hypre_amg")
+        
         global h_eps
         h_eps = em.get_h_eps(theta_0)
+        print(hmax/h_eps)
+
+        global dt_cfl
+        dt_cfl = em.get_delta_t_cfl(h_eps, lambda_/np.sqrt(t_0))
         
         # Into hdf file
         if SAVE_DAT:
@@ -821,6 +826,13 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
         
         # Convergence data:
         if CONVERGENCE and sim:
+
+            def eformat(f, prec, exp_digits):
+                s = "%.*e"%(prec, f)
+                mantissa, exp = s.split('e')
+                # add 1 to digits as 1 is taken by sign +/-
+                return "%se%+0*d"%(mantissa, exp_digits+1, int(exp))
+            
             theta_analytic_proj=dolfin.project(theta_analytic,sim[method][1].function_space(),solver_type="cg",preconditioner_type="hypre_amg")
             errmethod={}
             for method in sim:
@@ -836,18 +848,17 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
             if rank==0:
                 with open('./out/data/'+str(DIM)+'d/convergence.csv', 'a') as csvfile:
 
-                    filewriter = csv.writer(csvfile, delimiter=',',
-                                            #quotechar='|',
-                                            quoting=csv.QUOTE_MINIMAL
+                    filewriter = csv.writer(csvfile, delimiter=';',
+                                            quoting=csv.QUOTE_NONE,
                     )
                     
-                    params=r'\makecell{$h$=\numprint{'+'{0:>2.1e}'.format(hmax)+r'}, $\epsilon$=\numprint{'+'{0:>2.1e}'.format(float(em.EPS))+r'} \\ ($\Delta t$=\numprint{'+r'{0:>2.1e}'.format(dt)+'})}'
+                    params=r'\makecell{$\hcell$=\numprint{'+eformat(hmax,1,1)+r'}, $\epsilon$=\numprint{'+eformat(float(em.EPS),1,1)+r'} \\ ($\delt$=\numprint{'+eformat(dt,1,1)+'})}'
                     for method in sim:
                         filewriter.writerow([params,
                                              method,
-                                             r'\numprint{'+'{0:>2.2e}'.format(errmethod[method][0])+'}',
-                                             r'\numprint{'+'{0:>2.2e}'.format(errmethod[method][1])+'}',
-                                             r'\numprint{'+'{0:>2.2e}'.format(errmethod[method][2])+'}'
+                                             r'\numprint{'+eformat(errmethod[method][0],2,1)+'}',
+                                             r'\numprint{'+eformat(errmethod[method][1],2,1)+'}',
+                                             r'\numprint{'+eformat(errmethod[method][2],2,1)+'}'
                         ])
                         params=''
 
@@ -907,6 +918,8 @@ def stefan_benchmark():
 
 # Convergence simulation:
 def stefan_convergence():
+
+    em.C_CFL = 0.2
     
     meshres={
     1:[100,1000,10000],
@@ -915,9 +928,9 @@ def stefan_convergence():
     }
 
     with open('./out/data/'+str(DIM)+'d/convergence.csv', 'w') as csvfile:
-        filewriter = csv.writer(csvfile, delimiter=',',
-                                quotechar='|',
-                                quoting=csv.QUOTE_MINIMAL)
+        filewriter = csv.writer(csvfile, delimiter=';',
+                                quoting=csv.QUOTE_NONE,
+        )
 
         # Zapisujeme typ metody, L2 a L inf normu rel chyby
         filewriter.writerow(['params',
@@ -928,10 +941,12 @@ def stefan_convergence():
 
     for i,nx in enumerate(meshres[DIM]):
         prm.meshres[DIM]=nx
-        global dt
-        dt = 2*meshres[DIM][-i-1]
         em.EPS.assign(50./(10**(i+1)))
         stefan_benchmark()
+
+        # Reset time-step
+        global dt
+        del dt
 
 # One-parametric 1d stability benchmark:
 def stability1p():
@@ -977,6 +992,11 @@ def stability1p():
         # Return data backup to 2p stability data structure
         if backup:
             DATA_STABILITY['2p'][method][h] = backup
+
+    # Save disc parameters:
+    DATA_STABILITY['1p']['disc_params']['h'] = h
+    DATA_STABILITY['1p']['disc_params']['dt'] = dt
+    DATA_STABILITY['1p']['disc_params']['C_CFL'] = em.C_CFL
             
     # Save stability data for postprocessing:
     if rank==0:
@@ -1010,9 +1030,6 @@ def stability2p():
     meshres=np.append(meshres,1e4)
     timesteps=np.append(timesteps,1e5)
 
-    meshres = [1e2]
-    timesteps = [1e3]
-
     for method in ['EHC','TTM']:
 
         global METHODS
@@ -1043,6 +1060,11 @@ def stability2p():
                     DATA_STABILITY['2p'][method][1/nx][dt]["fp_err"]=1
                     DATA_STABILITY['2p'][method][1/nx][dt]["l2_err"]=1
                     DATA_STABILITY['2p'][method][1/nx][dt]["linf_err"]=1
+
+    # Save disc parameters
+    DATA_STABILITY['2p']['disc_params']['eps'] = float(em.EPS)
+    DATA_STABILITY['2p']['disc_params']['h_eps'] = h_eps
+    DATA_STABILITY['2p']['disc_params']['dt_cfl'] = dt_cfl
 
     # Save stability data for postprocessing:
     if rank==0:
