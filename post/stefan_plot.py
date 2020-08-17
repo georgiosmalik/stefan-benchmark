@@ -16,6 +16,7 @@ from mpl_toolkits.mplot3d import Axes3D
 from scipy.interpolate import UnivariateSpline, LinearNDInterpolator
 from scipy.optimize import curve_fit
 from scipy.interpolate import CubicSpline
+from math import floor, log10
 
 DIM=0
 
@@ -71,24 +72,28 @@ def graph_temp():
     plots=[]
 
     xticks=[[r1,2*lambda_*np.sqrt(timeset[0])],[r"$r_1$",r"$s(t_0)$"],]
+
+    theta_max = 0
     
-    for t in timeset:
+    for i,t in enumerate(timeset):
         x_range=data["temp_dist"][str(t)]["analytic"][0]
         y_range=data["temp_dist"][str(t)]["analytic"][1]
+
+        theta_max = max(theta_max,y_range[0])
 
         plt.plot(x_range,
                  y_range,
                  lw=2.,
-                 color=mplt.mypalette[color_id],
+                 color=mplt.mypalette[i+1],
                  marker=linestyle["analytic"]["marker"]
         )
 
         if t in timeset[1:-1]:
             # Create legend with time steps:
             stamp=(t-timeset[0])/(timeset[-1]-timeset[0])
-            names.append(r"$t_"+str(color_id-1)+"{=}t_0{+}"+str(f"{stamp:.1f}")+"\!\cdot\! \\tau$")
+            names.append(r"$t_"+str(i)+"{=}t_0{+}"+str(f"{stamp:.1f}")+"\!\cdot\! \\tau$")
             xticks[0].append(2*lambda_*np.sqrt(t))
-            xticks[1].append(r"$s(t_"+str(color_id-1)+")$")
+            xticks[1].append(r"$s(t_"+str(i)+")$")
 
         methodplots=()
             
@@ -101,20 +106,18 @@ def graph_temp():
                            y_range,
                            label=method,
                            linestyle='None',
-                           color=mplt.mypalette[color_id],
+                           color=mplt.mypalette[i+1],
                            marker=linestyle[method]["marker"],
-                           markersize=4,
+                           markersize=3,
                            markevery=(0.+len(methodplots)*0.1/len(methods),0.1)
             )
             methodplots=methodplots+(plot,)
             
         plots.append(methodplots)
-        color_id=color_id+1
 
     names.append(r"$t_\mathrm{max}$")
     xticks[0].extend([2*lambda_*np.sqrt(timeset[-1]),r2])
     xticks[1].extend([r"$s(t_\mathrm{max})$",r"$r_2$"])
-    
 
     # Create two graph legends, for methods and timesteps:
     second_legend_elems = [Line2D([0],[0],color=mplt.mypalette[1],label='analytic')]
@@ -131,8 +134,19 @@ def graph_temp():
     # Make custom ticks:
     ax.set_xticks(xticks[0])
     ax.set_xticklabels(xticks[1])
-    ax.set_yticks([prm.theta_m])
-    ax.set_yticklabels([r"$\theta_\mathrm{m}$"])
+
+    # Color gridlines for melt. front position:
+    for i,xgline in enumerate(ax.get_xgridlines()[1:len(timeset)+1]):
+        xgline.set_color(mplt.mypalette[i+1])
+        xgline.set_linestyle("dotted")
+        
+    ax.set_yticks([prm.theta_m, theta_max])
+    ax.set_yticklabels([r"$\theta_\mathrm{m}$",r"$"+str(int(theta_max))+"\,\mathrm{K}$"])
+
+    ax.get_yticklabels()[-1].set_rotation('vertical')
+
+    # Color gridlines for melt. front position:
+    ax.get_ygridlines()[0].set_linestyle("dotted")
 
     #------------------------------
     # Save the figure:
@@ -145,7 +159,7 @@ def graph_temp():
     dt=data["disc_params"]["dt"]
     c_cfl=data["disc_params"]["C_CFL"]
 
-    fig.set_size_inches(mplt.set_size(345./2),forward=True)
+    fig.set_size_inches(mplt.set_size(2*345./3),forward=True)
     fig.savefig('./out/fig/'+str(DIM)+'d/temp_dist_(eps='+'{0:>1.1e}'.format(eps)+'(h_eps='+'{0:>1.2e}'.format(h_eps)+',C_eps='+'{0:>1.1e}'.format(c_eps)+'),h_max='+'{0:>1.2e}'.format(h_max)+',dt='+'{0:>1.2e}'.format(dt)+'(C_CFL='+'{0:>1.1e}'.format(c_cfl)+').pdf',
                 format='pdf',
                 bbox_inches='tight',
@@ -154,12 +168,14 @@ def graph_temp():
     #--------------------------------------------
 
 # Graph melting front position:
-def graph_front_pos(offset=False,ls=False):
+def graph_front_pos():
 
     data=DATA_PY
 
     lambda_=data["problem_params"]["lambda"]
     timeset=data["problem_params"]["sim_timeset"]
+    r1 = data["problem_params"]["r1"]
+    r2 = data["problem_params"]["r2"]
     methods=list(data["front_pos"].keys())
 
     plot_data=[[timeset,2*lambda_*np.sqrt(timeset)]]
@@ -172,31 +188,7 @@ def graph_front_pos(offset=False,ls=False):
     
     for method in methods:
         front_positions=data["front_pos"][method]
-        if offset:
-            uh=np.asarray(front_positions)
-            u=2*lambda_*np.sqrt(timeset)
-            
-            # Offset the graph using least-squares method:
-            #offset=(-np.inner(uh,u)*sum(uh)+np.inner(uh,uh)*sum(u))/(np.inner(uh,uh)*len(uh)-sum(uh)**2)
-
-            # Offset ze spojiteho vzorce (funguje)
-            offset=timestep/tau*sum(u-uh)
-        else:
-            offset=0
-
-        # Least squares fit:
-        if ls:
-            uh=np.asarray(front_positions)
-            a = np.vstack([np.sqrt(timeset),np.ones(len(timeset))]).T
-            coeffs=np.dot(np.linalg.inv(np.dot(a.T,a)),np.dot(a.T,uh))
-            print(coeffs,(coeffs[0]/2-lambda_)/lambda_)
-
-            # least squares plot:
-            plot_data.append([timeset,coeffs[0]*np.sqrt(timeset)+coeffs[1]])
-            plt.plot(timeset,coeffs[0]*np.sqrt(timeset)+coeffs[1])
-        else:
-            # offset plot:
-            plot_data.append([timeset,np.asarray(front_positions)+offset])
+        plot_data.append([timeset,np.asarray(front_positions)])
         legend.append(method)
 
     # Save the figure:
@@ -215,7 +207,7 @@ def graph_front_pos(offset=False,ls=False):
                  linestyle=linestyle,
                  axlabels=["",r"$s(t)$"],
                  xticks=[[timeset[0],timeset[-1]],[r"$t_0$",r"$t_{\mathrm{max}}$"]],
-                 yticks=[[],[]],
+                 yticks=[[r1,r2],[r"$r_1$",r"$r_2$"]],
                  ylim={"bottom":0.},
                  savefig={"width":345./2,"name":'./out/fig/'+str(DIM)+'d/front_pos_(eps='+'{0:>1.1e}'.format(eps)+'(h_eps='+'{0:>1.2e}'.format(h_eps)+',C_eps='+'{0:>1.1e}'.format(c_eps)+'),h_max='+'{0:>1.2e}'.format(h_max)+',dt='+'{0:>1.2e}'.format(dt)+'(C_CFL='+'{0:>1.1e}'.format(c_cfl)+').pdf'},)
 
@@ -243,12 +235,29 @@ def graph_front_vel():
     plot_data=[[timeset,lambda_/np.sqrt(timeset)]]
     legend=['analytic']
 
+    vel_max = lambda_/np.sqrt(timeset)[0]
+
+    try:
+        vel_max_exp = int(np.floor(np.log10(vel_max)))
+    except OverflowError:
+        vel_max_exp = 0
+
+    vel_max_man = vel_max/10**vel_max_exp
+
     for method in methods:
         
-        front_positions=data["front_pos"][method]
+        front_positions=np.asarray(data["front_pos"][method])
 
-        spline_every = 50
-        pos_spline = CubicSpline(timeset[::spline_every], front_positions[::spline_every])
+        num_spline_points = 50
+
+        if num_spline_points >= len(timeset):
+            spline_timeset=timeset
+        else:
+            idx_spline=np.round(np.linspace(num_spline_points,len(timeset)-1,num_spline_points)).astype(int)
+            spline_timeset = np.append(timeset[0:num_spline_points],timeset[idx_spline])
+            front_pos_spline = np.append(front_positions[0:num_spline_points],front_positions[idx_spline])
+        
+        pos_spline = CubicSpline(spline_timeset, front_pos_spline)
         
         vel_spline = pos_spline(timeset, 1)
         vel_spline = pos_spline.derivative()
@@ -261,9 +270,9 @@ def graph_front_vel():
                  color=2*mplt.mypalette[:len(methods)+1],
                  legend=legend,
                  linestyle=linestyle,
-                 axlabels=["",r"$\mathbf{\nu}_{\sigma}(t)$"],
+                 axlabels=["",r"$\mathbf{\nu}_{\sigma}(t)\,[10^{"+str(vel_max_exp)+"}\mathrm{m}\cdot \mathrm{s}^{-1}]$"],
                  xticks=[[timeset[0],timeset[-1]],[r"$t_0$",r"$t_{\mathrm{max}}$"]],
-                 yticks=[[],[]],
+                 yticks=[[0,vel_max],[r"$0$",r"$"+'{0:1.2f}'.format(vel_max_man)+"$"]],
                  ylim={"bottom":0.},
                  savefig={"width":345./2,
                           "name":'./out/fig/'+str(DIM)+'d/front_vel_(eps='+'{0:>1.1e}'.format(eps)+'(h_eps='+'{0:>1.2e}'.format(h_eps)+',C_eps='+'{0:>1.1e}'.format(c_eps)+'),h_max='+'{0:>1.2e}'.format(h_max)+',dt='+'{0:>1.2e}'.format(dt)+'(C_CFL='+'{0:>1.1e}'.format(c_cfl)+').pdf'
@@ -299,16 +308,23 @@ def graph_stability1p():
 
         fig = plt.figure()
         ax = fig.add_subplot(111, label = "1")
+
         ax2 = ax.twiny()
+
+        ax2.set_xlabel(r"$C_\epsilon\,[-]$")
+        ax2.set_xlim(min(X_C_eps), max(X_C_eps))
+
+        ax2.set_axisbelow(True)
+
+        # Color gridlines for alternative x-axis:
+        for xgline in ax2.get_xgridlines():
+            xgline.set_linestyle("dotted")
         
         ax.plot(X, fp_err, color = mplt.mypalette[0], label = r'$|s-\overline{s}|/|s|$')
         ax.plot(X, l2_err, color = mplt.mypalette[2], linestyle = 'dotted', lw = 2, label = r'$\|\theta-\overline{\theta}\|_{L^2}/\|\theta\|_{L^2}$')
         #ax.plot(X,linf_err, color = mplt.mypalette[2], linestyle = 'dotted', lw = 2., label = r'$\|\theta-\overline{\theta}\|_{L^\infty}/\|\theta\|_{L^\infty}$')
         ax.set_xlabel(r"$\epsilon\,[K]$")
         ax.invert_xaxis()
-
-        ax2.set_xlabel(r"$C_\epsilon\,[-]$")
-        ax2.set_xlim(min(X_C_eps), max(X_C_eps))
 
         ax.set_yscale('log')
 
@@ -384,33 +400,21 @@ def graph_stability2p():
     Z = {}
     Z_log={}
 
-    # contour plot (lines starts with ##)
-    ##mask = {}
-
     for err_type in ['fp_err','l2_err','linf_err']:
         for method in data:
             Z=[]
             Z_log=[]
-            ##mask[method]=[]
+    
             for deltat in timestep:
                 line=[]
-                ##mask_line = []
+    
                 for h in meshres:
                     line.append(data[method][h][deltat][err_type])
-                    ##if data[x][y][method] == 1:
-                    ##mask_line.append(True)
-                ##else:
-                    ##mask_line.append(False)
+    
                 Z.append(line)
-            ##mask[method].append(mask_line)
+    
             Z=np.asarray(Z)
-            ##mask[method]=np.asarray(mask[method],dtype=bool)
-
             Z_log=np.log10(Z)
-            ##Z_log[method]=np.ma.array(Z_log[method],mask=mask[method])
-
-            # Contour plot
-            ##fig, ax = plt.subplots(1,1)
 
             # 3d plot:
             fig = plt.figure()
@@ -420,20 +424,6 @@ def graph_stability2p():
             
             ax = fig.gca(projection='3d')
             surf = ax.plot_surface(X_gr,Y_gr,Z_log, linewidth=0.5, alpha=0.9, cmap=mycmp[method])
-        
-            # Contour plot:
-            # v = {"TTM":np.linspace(-2.5,0.,11, endpoint=True), "EHC":np.linspace(-5.,0.,21, endpoint=True)}
-        
-            # cs = ax.contourf(X,Y,Z_log[method], v[method], cmap=mycmp[method], corner_mask=True)
-            # ax.contour(cs, linestyles='solid', linewidths=0.5, colors='k')
-
-            # ax.plot(np.ma.array(X,mask=~mask[method]),Y, linestyle='none', color=mplt.mypalette[0], marker='s', markersize=2,label='not converged')
-            # plt.legend(loc="lower right", bbox_to_anchor=(1.,0.), frameon=True, fancybox=False, borderaxespad=0.)
-            # plt.grid(b=None)
-            
-            # cbar = fig.colorbar(cs, ticks=v[method])
-            # cbar.ax.set_ylabel(r"$\Delta s_{\mathrm{r}}$")
-            #------------------
             
             ax.set_aspect('equal','box')
             
@@ -451,7 +441,6 @@ def graph_stability2p():
         
             ax.xaxis.get_ticklabels()[-1].set_color(color)
             ax.xaxis.get_ticklabels()[-1].set_fontsize(5)
-            #ax.xaxis.get_ticklabels()[-1].set_rotation(-60)
             ax.xaxis.get_ticklines()[-1].set_color(color)
             
             ax.set_yticks(yticks)
@@ -459,7 +448,6 @@ def graph_stability2p():
             
             ax.yaxis.get_ticklabels()[-1].set_color(color)
             ax.yaxis.get_ticklabels()[-1].set_fontsize(5)
-            #ax.yaxis.get_ticklabels()[-1].set_rotation(30)
             ax.yaxis.get_ticklines()[-1].set_color(color)
 
             ax.tick_params(axis = 'x', pad = -1.5)
@@ -486,10 +474,6 @@ def graph_stability2p():
             
             ax.set_zticks(zticks)
             ax.set_zticklabels(zticks_labels)
-            
-            ##ax.yaxis.get_ticklabels()[-1].set_rotation(90)
-            ##ax.yaxis.get_ticklabels()[-1].set_verticalalignment('center')
-            
 
             # Optimality boundary:
             
@@ -514,319 +498,3 @@ def graph_stability2p():
                         #bbox_inches='tight',
                         transparent=True
         )
-    
-#----------------------------------
-# Backup (HDF file postprocessing):
-#==================================
-
-# HDF temp. dist. graphing:
-
-# def graph_temp(dat_timeset,plot_timeset,lambda_,theta_analytic,sim,data_hdf,comm,rank,bbox):
-
-#     fig, ax = plt.subplots(1,1)
-#     #ax.set_xlabel(r"$r\,[\mathrm{m}]$")
-#     #ax.set_ylabel(r"$\theta\,[\mathrm{K}]$")
-
-#     # Pomocne veliciny pro vykreslovani grafu teplotnich poli:
-#     color_id=1
-#     names=[r"$t_0$"]
-#     plots=[]
-#     xticks=[[prm.R1,2*lambda_*np.sqrt(plot_timeset[0])],[r"$r_1$",r"$s(t_0)$"],]
-    
-#     for t in plot_timeset:
-#         theta_analytic.t=t
-#         x_range = np.arange(prm.R1,prm.R2,0.001)
-#         y_range = x_range*0.0
-#         for i,x in enumerate(x_range):
-#             xp=dolfin.Point(x)
-#             if bbox.compute_collisions(xp):
-#                 y_range[i]=theta_analytic(xp)
-#         if rank==0:
-#             for process in range(comm.size)[1:]:
-#                 y=comm.recv(source=process)
-#                 y_range=np.maximum(y_range,y)
-#         if rank!=0:
-#             comm.send(y_range,dest=0)
-#         if rank==0:
-#             plt.plot(x_range,
-#                      y_range,
-#                      lw=2.,
-#                      color=mplt.mypalette[color_id],
-#                      marker=linestyle["analytic"]["marker"]
-#             )
-
-#         if t in plot_timeset[1:-1]:
-#             # Create legend with time steps:
-#             stamp=(t-dat_timeset[0])/(dat_timeset[-1]-dat_timeset[0])
-#             names.append(r"$t_"+str(color_id-1)+"{=}t_0{+}"+str(f"{stamp:.1f}")+"\!\cdot\! \\tau$")
-#             xticks[0].append(2*lambda_*np.sqrt(t))
-#             xticks[1].append(r"$s(t_"+str(color_id-1)+")$")
-
-#         methodplots=()
-            
-#         for method in sim:
-            
-#             # get the index of t in dat_timeset:
-#             index,=np.where(np.isclose(dat_timeset,t))
-
-#             # Load theta from data_hdf file:
-#             theta=dolfin.Function(sim[method][1].function_space())
-#             data_hdf.read(theta,"/theta_"+method+"/vector_%i"%index)
-            
-#             for i,x in enumerate(x_range):
-#                 xp=dolfin.Point(x)
-#                 if bbox.compute_collisions(xp):
-#                     y_range[i]=theta(xp)
-#             if rank==0:
-#                 for process in range(comm.size)[1:]:
-#                     y=comm.recv(source=process)
-#                     y_range=np.maximum(y_range,y)
-#             if rank!=0:
-#                 comm.send(y_range,dest=0)
-#             if rank==0:
-#                 plot,=plt.plot(x_range,
-#                                y_range,
-#                                label=method,
-#                                linestyle='None',
-#                                color=mplt.mypalette[color_id],
-#                                marker=linestyle[method]["marker"],
-#                                markersize=6,
-#                                markevery=(0.+len(methodplots)*0.1/len(sim),0.1)
-#                 )
-#                 methodplots=methodplots+(plot,)
-#         if rank==0:
-#             plots.append(methodplots)
-#         color_id=color_id+1
-
-#     names.append(r"$t_\mathrm{max}$")
-#     xticks[0].extend([2*lambda_*np.sqrt(plot_timeset[-1]),prm.R2])
-#     xticks[1].extend([r"$s(t_\mathrm{max})$",r"$r_2$"])
-    
-
-#     # Create two graph legends, for methods and timesteps:
-#     if rank==0:
-#         second_legend_elems = [Line2D([0],[0],color=mplt.mypalette[1],label='analytic')]
-#         for method in sim:
-#             leg_element=Line2D([0],[0],color=mplt.mypalette[1],marker=linestyle[method]["marker"],linestyle='None',label=method)
-#             second_legend_elems.append(leg_element)
-#         second_legend=plt.legend(handles=second_legend_elems,loc="upper right", frameon=True, fancybox=False, borderaxespad=0.)
-#         ax2 = plt.gca().add_artist(second_legend)
-#         if methodplots:
-#             ax.legend(plots,names,loc="upper right", bbox_to_anchor=(0.78,1.),handler_map={tuple: HandlerTuple(ndivide=len(methodplots))}, frameon=True, fancybox=False, borderaxespad=0.)
-#         else:
-#             ax.legend(names,loc="upper right", bbox_to_anchor=(0.78,1.), frameon=True, fancybox=False, borderaxespad=0.)
-
-#         # Make custom ticks:
-#         ax.set_xticks(xticks[0])
-#         ax.set_xticklabels(xticks[1])
-#         ax.set_yticks([prm.theta_m])
-#         ax.set_yticklabels([r"$\theta_\mathrm{m}$"])
-#         #------------------------------
-#         # Save the figure:
-#         data_hdf.read(theta,"C_eps")
-#         c_eps=theta.vector().norm('linf')
-
-#         data_hdf.read(theta,"C_CFL")
-#         c_cfl=theta.vector().norm('linf')
-
-#         data_hdf.read(theta,"h_max")
-#         h_max=theta.vector().norm('linf')
-        
-#         fig.set_size_inches(mplt.set_size(345.,ratio=3*(5**.5-1)/8),forward=True)
-#         fig.savefig('./out/fig/'+str(DIM)+'d/temp_dist_(h_max='+'{0:>2.2e}'.format(h_max)+',C_eps='+'{0:>2.1e}'.format(c_eps)+'C_CFL='+'{0:>2.1e}'.format(c_cfl)+').pdf',
-#                     format='pdf',
-#                     bbox_inches='tight',
-#                     transparent=False
-#         )
-#----------------------------------
-
-# HDF Graph temp. dist. diff.:
-
-# def graph_temp_diff(dat_timeset,plot_timeset,theta_analytic,sim,data_hdf,comm,rank,bbox):
-
-#     fig, ax = plt.subplots(1,1)
-
-#     # Pomocne veliciny pro vykreslovani grafu teplotnich poli:
-#     color_id=1
-#     names=[]
-#     plots=[]
-    
-#     for t in plot_timeset:
-#         theta_analytic.t=t
-        
-#         # Create legend with time steps:
-#         stamp=(t-dat_timeset[0])/(dat_timeset[-1]-dat_timeset[0])
-#         names.append("$t{=}t_0{+}"+str(f"{stamp:.1f}")+"\!\cdot\! \\tau$")
-
-#         methodplots=()
-        
-#         for method in sim:
-            
-#             # get the index of t in dat_timeset:
-#             index,=np.where(np.isclose(dat_timeset,t))
-
-#             # Load theta from data_hdf file:
-#             theta=dolfin.Function(sim[method][1].function_space())
-#             data_hdf.read(theta,"/theta_"+method+"/vector_%i"%index)
-            
-#             for i,x in enumerate(x_range):
-#                 xp=dolfin.Point(x)
-#                 if bbox.compute_collisions(xp):
-#                     y_range[i]=abs(theta(xp)-theta_analytic(xp))
-#             if rank==0:
-#                 for process in range(comm.size)[1:]:
-#                     y=comm.recv(source=process)
-#                     y_range=np.maximum(y_range,y)
-#             if rank!=0:
-#                 comm.send(y_range,dest=0)
-#             if rank==0:
-#                 plot,=plt.plot(x_range,
-#                                y_range,
-#                                label=method,
-#                                linestyle='None',
-#                                color=mplt.mypalette[color_id],
-#                                marker=linestyle[method]["marker"],
-#                                markevery=(0.0+color_id*0.1/len(sim),0.1)
-#                 )
-#                 methodplots=methodplots+(plot,)
-#         if rank==0:
-#             plots.append(methodplots)
-#         color_id=color_id+1
-
-#     # Create two graph legends, for methods and timesteps:
-#     if rank==0:
-#         first_legend_elements = []
-#         for method in sim:
-#             leg_element=Line2D([0],[0],color=mplt.mypalette[1],marker=linestyle[method]["marker"],linestyle='None',label=method)
-#             first_legend_elements.append(leg_element)
-#         first_legend=plt.legend(handles=first_legend_elements,loc="upper right")
-#         ax2 = plt.gca().add_artist(first_legend)
-#         fig.legend(plots,names,loc="lower left",handler_map={tuple: HandlerTuple(ndivide=3)})
-        
-#         #------------------------------
-#         # Save the figure:
-#         fig.set_size_inches(mplt.set_size(345.,ratio=(5**.5-1)/2))
-#         fig.savefig('./out/fig/'+str(DIM)+'d/temp_dist_diff.pdf',
-#                     format='pdf',
-#                     bbox_inches='tight',
-#                     transparent=False
-#         )
-# #--------------------------------------------
-
-# Graph front positions:
-
-# def graph_front_pos(dat_timeset,lambda_,front_positions,offset=False,ls=False):
-
-#     plot_data=[[dat_timeset,2*lambda_*np.sqrt(dat_timeset)]]
-#     plt.plot(dat_timeset,2*lambda_*np.sqrt(dat_timeset))
-#     legend=['analytic']
-
-#     tau=dat_timeset[-1]-dat_timeset[0]
-#     timestep=dat_timeset[1]-dat_timeset[0]
-    
-#     for method in front_positions:
-        
-#         if offset:
-#             uh=np.asarray(front_positions[method])
-#             u=2*lambda_*np.sqrt(dat_timeset)
-            
-#             # Offset the graph using least-squares method:
-#             #offset=(-np.inner(uh,u)*sum(uh)+np.inner(uh,uh)*sum(u))/(np.inner(uh,uh)*len(uh)-sum(uh)**2)
-
-#             # Offset ze spojiteho vzorce (funguje)
-#             offset=timestep/tau*sum(u-uh)
-#         else:
-#             offset=0
-
-#         # Least squares fit:
-#         if ls:
-#             uh=np.asarray(front_positions[method])
-#             a = np.vstack([np.sqrt(dat_timeset),np.ones(len(dat_timeset))]).T
-#             coeffs=np.dot(np.linalg.inv(np.dot(a.T,a)),np.dot(a.T,uh))
-#             print(coeffs,(coeffs[0]/2-lambda_)/lambda_)
-
-#             # least squares plot:
-#             plot_data.append([dat_timeset,coeffs[0]*np.sqrt(dat_timeset)+coeffs[1]])
-#             plt.plot(dat_timeset,coeffs[0]*np.sqrt(dat_timeset)+coeffs[1])
-#         else:
-#             # offset plot:
-#             plot_data.append([dat_timeset,np.asarray(front_positions[method])+offset])
-#         legend.append(method)
-                         
-#     mplt.graph1d(plot_data,
-#                  color=mplt.mypalette[:len(front_positions)+1],
-#                  legend=legend,
-#                  linestyle=linestyle,
-#                  axlabels=["",r"$s(t)$"],
-#                  xticks=[[dat_timeset[0],dat_timeset[-1]],[r"$t_0$",r"$t_{\mathrm{max}}$"]],
-#                  #yticks=[[2*lambda_*np.sqrt(dat_timeset[0]),2*lambda_*np.sqrt(dat_timeset[-1])],[r"$s(t_0)$",r"$s(t_{\mathrm{max}})$"]],
-#                  yticks=[[],[]],
-#                  savefig={"width":345./2,"name":'./out/fig/'+str(DIM)+'d/front_pos.pdf'},)
-
-# Graph front pos diff (does NOT work for data_py):
-
-# def graph_front_pos_diff(timeset,lambda_,front_positions):
-#     plot_data=[]
-#     legend=[]
-#     for method in front_positions:
-#         plot_data.append([timeset,abs(front_positions[method]-2*lambda_*np.sqrt(timeset))])
-#         legend.append(method)
-#     mplt.graph1d(plot_data,
-#                  color=mplt.mypalette[1:],
-#                  legend=legend,
-#                  xticks=[[timeset[0],timeset[-1]],
-#                          [r"$t_0$",r"$t_{\mathrm{max}}$"]],
-#                  savefig={"width":345./2,"name":'./out/fig/'+str(DIM)+'d/front_pos_diff.pdf'},
-#     )
-
-# Graph front pos vel (does NOT work for data_py):
-
-# def graph_front_vel(timeset,lambda_,front_positions, interpolation=True, curvefit=False):
-#     plot_data=[[timeset[1:],lambda_/np.sqrt(timeset[1:])]]
-#     legend=['analytic']
-
-#     tau=timeset[-1]-timeset[0]
-#     timestep=timeset[1]-timeset[0]
-
-#     # Curve fit model:
-#     def f(x,a,b):
-#         return a/np.sqrt(x)+b
-
-
-#     # Interpolation
-#     if interpolation:
-#         for method in front_positions:
-#             # spline interpolation
-#             pos_spline=UnivariateSpline(timeset,front_positions[method],k=3)
-#             vel_spline=pos_spline.derivative()
-        
-#             plot_data.append([timeset[1:],vel_spline(timeset[1:])])
-#             legend.append(method)
-#     # Curve fitting:
-#     elif curvefit:
-#         for method in front_positions:
-#             # curve fit
-#             c_fit=curve_fit(f,timeset[1:],(np.asarray(front_positions[method][1:])-np.asarray(front_positions[method][:-1]))/timestep)
-        
-#             plot_data.append([timeset,c_fit[0][0]/np.sqrt(timeset)+c_fit[0][1]])
-#             legend.append(method)
-#     else:
-#         for method in front_positions:
-    
-#             plot_data.append([timeset[1:],(np.asarray(front_positions[method][1:])-np.asarray(front_positions[method][:-1]))/timestep])
-#             legend.append(method)
-            
-#     mplt.graph1d(plot_data,
-#                  color=2*mplt.mypalette[:len(front_positions)+1],
-#                  legend=legend,
-#                  linestyle=linestyle,
-#                  axlabels=["",r"$\mathbf{\nu}_{\sigma}(t)$"],
-#                  xticks=[[timeset[0],timeset[-1]],[r"$t_0$",r"$t_{\mathrm{max}}$"]],
-#                  #yticks=[[lambda_/np.sqrt(timeset[0]),lambda_/np.sqrt(timeset[-1])],[r"$\mathbf{\nu}_{\sigma}(t_0)$",r"$\mathbf{\nu}_{\sigma}(t_{\mathrm{max}})$"]],
-#                  yticks=[[],[]],
-#                  savefig={"width":345./2,
-#                           "name":'./out/fig/'+str(DIM)+'d/front_vel.pdf'
-#                  },
-#     )
-
-#==================================

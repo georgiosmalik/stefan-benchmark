@@ -2,11 +2,6 @@
 # Enthalpy method module
 #-----------------------
 
-# Obsahuje definice numerickych aproximaci funkci pro enthalpy metodu
-
-# Poznamky a dodelavky:
-# 1. neni lepsi do formulace pro zhlazene fyzikalni parametry vkladat Expression misto Conditionalu (UFL)?
-
 import dolfin
 import numpy as np
 
@@ -36,10 +31,6 @@ C_CFL = 0.2
 # -----------------------------------------
 
 # Auxiliary functions:
-# Hyperbolic tangent:
-# Note: this definition of hyperbolic tangent is unstable, use the one defined by ufl
-#def tanh(x):
-    #return (dolfin.exp(x) - dolfin.exp(-x))/(dolfin.exp(x) + dolfin.exp(-x))
 # Sign function
 def sign(x, x0=0.0):
     """ Give sign of the argument x-x0.
@@ -217,3 +208,8 @@ def get_h_eps(theta, projection = 'local', analytic = False):
 def get_delta_t_cfl(hmin, vmax):
     
     return C_CFL*hmin/vmax
+
+# ---------
+# Dev notes
+# ---------
+# use tanh defined by ufl, it is stable
