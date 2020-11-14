@@ -1,28 +1,28 @@
 import matplotlib as mpl
 # necessary for plotting in Snehurka cluster:
-#mpl.use('Agg')
+mpl.use('Agg')
 import matplotlib.pyplot as plt
 
 # Use 'ggplot' style
 plt.style.use('seaborn-whitegrid')
 # Use LaTeX fonts
-plt.style.use('tex')
+#plt.style.use('tex')
 #-----------------
 # or equivalently (when 'tex' style sheet N/A):
-# tex_fonts = {
-#     # Use LaTeX to write all text
-#     "text.usetex": True,
-#     "font.family": "serif",
-#     # Use 10pt font in plots, to match 10pt font in document
-#     "axes.labelsize": 10,
-#     "font.size": 10,
-#     # Make the legend/label fonts a little smaller
-#     "legend.fontsize": 8,
-#     "xtick.labelsize": 8,
-#     "ytick.labelsize": 8
-# }
+tex_fonts = {
+    # Use LaTeX to write all text
+    "text.usetex": True,
+    "font.family": "serif",
+    # Use 10pt font in plots, to match 10pt font in document
+    "axes.labelsize": 10,
+    "font.size": 10,
+    # Make the legend/label fonts a little smaller
+    "legend.fontsize": 8,
+    "xtick.labelsize": 8,
+    "ytick.labelsize": 8
+}
 
-# plt.rcParams.update(tex_fonts)
+plt.rcParams.update(tex_fonts)
 #-----------------
 
 # Custom colors:

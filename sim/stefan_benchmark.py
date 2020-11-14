@@ -409,9 +409,6 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
             # Timestep given by CFL:
             dt=C_CFL*hmin/vmax
 
-        print(dt*vmax/hmin)
-        exit()
-
         # Vytvor timeset pro simulaci:
         sim_timeset=np.arange(t_0,t_max,dt)
 
