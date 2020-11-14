@@ -171,8 +171,8 @@ def meshhdf(name):
     return (mesh,boundary,n,dx,ds)
 #=========================
 
-#------------------------
-# Notes and obsolete code
-#------------------------
+# ---------
+# Dev notes
+# ---------
 # when generating 3D mesh for Stefan benchmark, first run ./generate_mesh.sh that will produce mesh in .msh file format from the .geo file and immediately convert it to .xml using dolfin-convert (deprecated in the newer versions of FEniCS), then mesh3d opens the .xml file and stores the mesh in hdf5 file format, that contains boundary markings from gmsh physical groups
 # initialize the mesh with 0, otherwise errors in parallel (cluster) may occur

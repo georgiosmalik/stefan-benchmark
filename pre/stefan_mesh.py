@@ -2,9 +2,6 @@
 # Stefan benchmark preprocessing
 # ------------------------------
 
-# Poznamky a opravy:
-# DONE 1. Zautomatizovat generovani site pro 3d?
-
 import subprocess
 import os
 

@@ -2,30 +2,35 @@
 # Enthalpy method module
 #-----------------------
 
-# Obsahuje definice funkci pro enthalpy metodu, formulace Cao, Equivalent heat capacity i nasi formulaci enthalpy metody
-
-# Poznamky a dodelavky:
-# 1. neni lepsi do formulace pro zhlazene fyzikalni parametry vkladat Expression misto Conditionalu?
-
 import dolfin
 import numpy as np
 
+import sim.params as prm
+
 from ufl import tanh
 
-# Global parameters
-# Mollification constants
-EPS = dolfin.Constant(0.4)
-DEG = 'Cinf'
-C_EPS=1.
+# ------------------------------------
+# Global parameters of enthalpy method
+# ------------------------------------
 
-#---------------------------------
-# Definition of additional methods
-#---------------------------------
+# Temperature mollification parameter (default EPS = 0.5)
+EPS = dolfin.Constant(0.5)
+
+# Relaxation parameter for optimal space discretization bound
+C_EPS = 1.
+
+# Degree of approximation of special functions (Dirac and Heaviside)
+DEG = 'Cinf'
+# ====================================
+
+# CFL condition relaxation parameter
+C_CFL = 0.2
+
+# -----------------------------------------
+# Numerical approximations of distributions
+# -----------------------------------------
+
 # Auxiliary functions:
-# Hyperbolic tangent:
-# Note: this definition of hyperbolic tangent is unstable, use the one defined by ufl
-#def tanh(x):
-    #return (dolfin.exp(x) - dolfin.exp(-x))/(dolfin.exp(x) + dolfin.exp(-x))
 # Sign function
 def sign(x, x0=0.0):
     """ Give sign of the argument x-x0.
@@ -94,14 +99,14 @@ def heaviside(x, x0=0.0, eps=EPS, deg=DEG):
         if type(x) == np.ndarray:
             return 0.5*np.tanh(2.5*(x-float(x0))/eps) + 0.5
         return 0.5*tanh(2.5*(x-x0)/eps) + 0.5
-        
-    degswitch = {
+
+    deg_switch = {
         'disC':hs_disC,
         'C0':hs_C0,
         'C1':hs_C1,
         'Cinf':hs_Cinf
         }
-    return degswitch.get(deg,"Please enter 'CO','C1','Cinf', or 'exact'.")
+    return deg_switch.get(deg,"Please enter 'CO','C1','Cinf', or 'exact'.")
 
 # Dirac function
 def df(x, x0=0.0, eps=EPS, deg=DEG):
@@ -148,14 +153,17 @@ def df(x, x0=0.0, eps=EPS, deg=DEG):
             return 1./(0.6*eps*np.sqrt(np.pi))*np.exp(-(x-x0)**2/(0.6**2*eps**2))
         return 1./(0.6*eps*np.sqrt(np.pi))*dolfin.exp(-(x-x0)**2/(0.6**2*eps**2))
         
-    degswitch = {
+    deg_switch = {
         'disC': df_disC,
         'C0':df_C0,
         'C1':df_C1,
         'Cinf':df_Cinf
         }
-    return degswitch.get(deg,"Please enter 'disC','CO','C1',or 'Cinf'.")
+    return deg_switch.get(deg,"Please enter 'disC','CO','C1',or 'Cinf'.")
 
+# -----------------------------------------
+# Tools for effective parameter definitions
+# -----------------------------------------
 def mollify(xminus, xplus, x, x0=0.0, eps=EPS, deg=DEG):
     """Mollify the jump between xminus and xplus values."""
     return xminus*(1-heaviside(x, x0, eps, deg)()) + xplus*heaviside(x, x0, eps, deg)()
@@ -163,111 +171,45 @@ def mollify(xminus, xplus, x, x0=0.0, eps=EPS, deg=DEG):
 def dirac(xvalue, x, x0=0.0, eps=EPS, deg=DEG):
     """Return dirac with L1 norm of xvalue."""
     return xvalue*df(x,x0,eps,deg)()
+# =========================================
 
-def set_eps(hmax,theta_grad_max):
-    # hmax=dolfin.MPI.max(mesh.mpi_comm(),mesh.hmax())
-    # theta_norm=dolfin.project(dolfin.sqrt(dolfin.inner(dolfin.grad(theta),dolfin.grad(theta))),theta.function_space())
-    # theta_grad_max=theta_norm.vector().norm('linf')
-    global EPS
-    EPS.assign(hmax*theta_grad_max/(2*C_EPS))
-# #---------------------------------
-# # Enthalpy method formulation from Cao, 1990:
-# # Source term:
-# def s(theta, theta0 = theta_m, eps = eps):
-#     return conditional(abs(theta-theta0)<eps,c_m*eps + L_m/2, conditional(theta > theta0, c_s*eps + L_m, c_s*eps))
-# def enth(theta, theta0 = theta_m, eps = eps):
-#     return c(theta, theta0, eps, type="cao")*(theta-theta0) + s(theta, theta0)
-# #---------------------------------
-# # Mollified material characteristics:
-# # Kowalewski experiment state equations for water:
-# def rho_l_kowal(x):
-#     return 999.840281167108 + 0.0673268037314653*(x - 273.15) - 0.00894484552601798*(x-273.15)**2 + 8.78462866500416e-5*(x-273.15)**3 - 6.62139792627547e-7*(x-273.15)**4
+def get_h_eps(theta, projection = 'local', analytic = False):
 
-# def alpha_l_kowal(x):
-#     return -(0.0673268037314653 - 2*0.00894484552601798*(x-273.15) + 3*8.78462866500416e-5*(x-273.15)**2 - 4*6.62139792627547e-7*(x-273.15)**3)/rho_l_kowal(x)
+    def norm_theta_grad_local():
 
-# def c_l_kowal(x):
-#     return 8958.66-40.534*x + 1.1234e-1*x**2-1.01379e-4*x**3
+        delta_local = 1.5
+        
+        local_proj = dolfin.conditional(abs(theta-prm.theta_m)<delta_local,1.,0.)
+        
+        norm_theta_grad = dolfin.project(local_proj*dolfin.sqrt(dolfin.inner(dolfin.grad(theta),dolfin.grad(theta))),theta.function_space(),solver_type="cg",preconditioner_type="hypre_amg")
+        
+        return norm_theta_grad.vector().norm('linf')
 
-# def k_l_kowal(x):
-#     return 0.566*(1 + 0.001*x)
+    def norm_theta_grad_global():
+        
+        norm_theta_grad=dolfin.project(dolfin.sqrt(dolfin.inner(dolfin.grad(theta),dolfin.grad(theta))),theta.function_space(),solver_type="cg",preconditioner_type="hypre_amg")
 
-# def mu_l_kowal(x):
-#     return 1.79e-3*exp(6.18e7*(1/(x**3)-1/(273.15**3)))
-# #---------------------------------
-# # Mollified density:
-# def rho(x, x0 = theta_m, eps = eps, deg = deg, type=None):
-#     if type=="kowal":
-#         return rho_l_kowal(x)*hs(x, x0, eps, deg) + rho_s*(Constant(1)-hs(x, x0, eps, deg))
-#     elif type=="dana":
-#         return rho_w(x)*hs(x, x0, eps, deg) + rho_s*(Constant(1)-hs(x, x0, eps, deg))
-#     return rho_l*hs(x, x0, eps, deg) + rho_s*(Constant(1.)-hs(x, x0, eps, deg))
+        return norm_theta_grad.vector().norm('linf')
 
-# # Mollified heat capacity:
-# def c(theta, theta0 = theta_m, eps = eps, deg = deg, type=None):
-#     if type=="kowal":
-#         return c_l_kowal(theta)*hs(theta, theta0, eps, deg) + L_m*df(theta, theta0, eps, deg) + c_s*(Constant(1)-hs(theta, theta0, eps, deg))
-#     if type=="cao":
-#         return conditional(abs(theta-theta0)<eps,c_m + L_m/(2*eps), conditional(theta > theta0, c_l, c_s))
-#     return c_l*hs(theta, theta0, eps, deg) + L_m*df(theta, theta0, eps, deg) + c_s*(Constant(1)-hs(theta, theta0, eps, deg))
+    projection_switch = {
+        'local': norm_theta_grad_local,
+        'global': norm_theta_grad_global
+        }
 
-# # Mollified product of capacity and density:
-# def rhoc(x, x0 = theta_m, eps = eps, deg = deg, type=None):
-#     if type=="kowal":
-#         return rho_l*c_l_kowal(x)*hs(x, x0, eps, deg) + L_m*(rho_l+rho_s)/2*df(x, x0, eps, deg) + rho_s*c_s*(Constant(1)-hs(x, x0, eps, deg))
-#     elif type=="dana":
-#         return rho_w(x)*c_l_kowal(x)*hs(x, x0, eps, deg) + L_m*rho_l*df(x, x0, eps, deg) + rho_s*c_s*(Constant(1)-hs(x, x0, eps, deg))
-#     return rho_l*c_l*hs(x, x0, eps, deg) + L_m*rho_l*df(x, x0, eps, deg) + rho_s*c_s*(Constant(1)-hs(x, x0, eps, deg))
+    if analytic:
+        theta_grad_max = theta
+    else:
+        theta_grad_max = projection_switch.get(projection,
+                                           "Please choose 'local', or 'global' for projection."
+        )()
+        
+    return C_EPS*float(EPS)/theta_grad_max
 
-# # Model of temperature dependent density of water for Kowalski benchmark (see Danaila in refs):
-# def rho_w(theta):
-#     # Density function parameters:
-#     theta_max = Constant(277.1793)      # Temperature of water with max density
-#     rho_max = Constant(999.972)         # Reference density at theta_max
-#     w_coeff = 9.2793e-6                 # Multiplicative coefficient [K^(-q)]
-#     q_coeff = 1.894816                  # Exponent of temperature difference
-#     return rho_max*(1 - w_coeff*(abs(theta - theta_max))**q_coeff)
+def get_delta_t_cfl(hmin, vmax):
+    
+    return C_CFL*hmin/vmax
 
-# # Effective value of density for the buoyancy term
-# def rho_w_eff(x, x0 = theta_m, eps = eps, deg = deg):
-#     return rho_w(x)*hs(x, x0, eps, deg) + rho_s*(Constant(1.)-hs(x, x0, eps, deg))
-
-# # Mollified heat conductivity:
-# def k(x, x0 = theta_m, eps = eps, deg = deg, type=None):
-#     if type == "kowal":
-#         return k_l_kowal(x)*hs(x, x0, eps, deg) + k_s*(Constant(1)-hs(x, x0, eps, deg))
-#     return k_l*hs(x, x0, eps, deg) + k_s*(Constant(1)-hs(x, x0, eps, deg))
-
-# # Mollified viscosity:
-# def mu(x, x0 = theta_m, eps = eps, deg = deg, type = None):
-#     if type == "kowal":
-#        return mu_l_kowal(x)*hs(x, x0, eps, deg) + mu_s*(Constant(1.)-hs(x, x0, eps, deg))
-#     return mu_l*hs(x, x0, eps, deg) + mu_s*(Constant(1.)-hs(x, x0, eps, deg))
-
-# # Mollified logarithmic viscosity:
-# def mu_log(x, x0 = theta_m, eps = eps, deg = deg):
-#        return exp(np.log(float(mu_l))*hs(x, x0, eps, deg) + math.log(float(mu_s))*(Constant(1.)-hs(x, x0, eps, deg)))
-
-# # Mollified expansion coefficient:
-# def alpha(x, x0 = theta_m, eps = eps, deg = deg, type = None):
-#     if type == "kowal":
-#         return alpha_l_kowal(x)*hs(x, x0, eps, deg) + alpha_s*(Constant(1.)-hs(x, x0, eps, deg))
-#     return alpha_l*hs(x, x0, eps, deg) + alpha_s*(Constant(1.)-hs(x, x0, eps, deg))
-# #---------------------------------
-# # Time step size
-# def cfl_dt(uv,mesh,*timescales):
-#        """Computes the time step using CFL condition"""
-#        C_CFL_v = 0.5
-#        C_CFL_T = 1e-1
-#        #h_min = MPI.min(mesh.mpi_comm(),mesh.hmin())
-#        h_min = mesh.hmin()
-#        #v_max = MPI.max(mesh.mpi_comm(),numpy.abs(uv.vector().array()).max())
-#        v_max = norm(uv.vector(),'linf')
-#        ts = [C_CFL_v*h_min/v_max]
-#        for tau in timescales:
-#            ts.append(C_CFL_T*tau)
-#        # value of CFL
-#        print(ts)
-#        dt = min(ts)
-#        return dt
-# #=================================
+# ---------
+# Dev notes
+# ---------
+# use tanh defined by ufl, it is stable

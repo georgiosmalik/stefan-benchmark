@@ -17,7 +17,7 @@ tex_fonts = {
     "axes.labelsize": 10,
     "font.size": 10,
     # Make the legend/label fonts a little smaller
-    "legend.fontsize": 8,
+    "legend.fontsize": 5,
     "xtick.labelsize": 8,
     "ytick.labelsize": 8
 }
@@ -109,8 +109,9 @@ def graph1d(data,**figprm):
 
     # Set yticks:
     if "yticks" in figprm:
-        #ax.set_yticks(figprm["yticks"][0])
-        #ax.set_yticklabels(figprm["yticks"][1])
+        ax.set_yticks(figprm["yticks"][0])
+        if len(figprm["yticks"])>1:
+            ax.set_yticklabels(figprm["yticks"][1])
         #plt.yticks(figprm["yticks"][0],figprm["yticks"][1],rotation='vertical', va='center')
         plt.yticks(figprm["yticks"][0],rotation='vertical', va='center')
 
