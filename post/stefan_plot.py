@@ -120,7 +120,7 @@ def graph_temp():
     xticks[1].extend([r"$s(t_\mathrm{max})$",r"$r_2$"])
 
     # Create two graph legends, for methods and timesteps:
-    second_legend_elems = [Line2D([0],[0],color=mplt.mypalette[1],label='analytic')]
+    second_legend_elems = [Line2D([0],[0],color=mplt.mypalette[1],label='analytical')]
     for method in methods:
         leg_element=Line2D([0],[0],color=mplt.mypalette[1],marker=linestyle[method]["marker"],markersize=4,linestyle='None',label=method)
         second_legend_elems.append(leg_element)
@@ -151,6 +151,9 @@ def graph_temp():
     #------------------------------
     # Save the figure:
     h_max=data["disc_params"]["h_max"]
+    h_min=data["disc_params"]["h_min"]
+    print(h_min)
+    exit()
     
     eps=data["disc_params"]["eps"]
     h_eps=data["disc_params"]["h_eps"]
@@ -179,7 +182,7 @@ def graph_front_pos():
     methods=list(data["front_pos"].keys())
 
     plot_data=[[timeset,2*lambda_*np.sqrt(timeset)]]
-    legend=['analytic']
+    legend=['analytical']
 
     tau=timeset[-1]-timeset[0]
 
@@ -233,7 +236,7 @@ def graph_front_vel():
     methods=list(data["front_pos"].keys())
     
     plot_data=[[timeset,lambda_/np.sqrt(timeset)]]
-    legend=['analytic']
+    legend=['analytical']
 
     vel_max = lambda_/np.sqrt(timeset)[0]
 
@@ -320,8 +323,8 @@ def graph_stability1p():
         for xgline in ax2.get_xgridlines():
             xgline.set_linestyle("dotted")
         
-        ax.plot(X, fp_err, color = mplt.mypalette[0], label = r'$|s-\overline{s}|/|s|$')
-        ax.plot(X, l2_err, color = mplt.mypalette[2], linestyle = 'dotted', lw = 2, label = r'$\|\theta-\overline{\theta}\|_{L^2}/\|\theta\|_{L^2}$')
+        ax.plot(X, fp_err, color = mplt.mypalette[0], label = r'$e_s$')
+        ax.plot(X, l2_err, color = mplt.mypalette[2], linestyle = 'dotted', lw = 2, label = r'$e^2_\theta$')
         #ax.plot(X,linf_err, color = mplt.mypalette[2], linestyle = 'dotted', lw = 2., label = r'$\|\theta-\overline{\theta}\|_{L^\infty}/\|\theta\|_{L^\infty}$')
         ax.set_xlabel(r"$\epsilon\,[K]$")
         ax.invert_xaxis()
@@ -364,9 +367,9 @@ def graph_stability2p():
     timestep = list(map(float,list(data['EHC'][list(data['EHC'].keys())[0]].keys())))
 
     # zlabel dictionary
-    zlabel = {'fp_err':r'$|s-\overline{s}|/s$',
-              'l2_err':r'$\|\theta-\overline{\theta}\|_{L^2}/\|\theta\|_{L^2}$',
-              'linf_err':r'$\|\theta-\overline{\theta}\|_{L^\infty}/\|\theta\|_{L^\infty}$'
+    zlabel = {'fp_err':r'$e_s$',
+              'l2_err':r'$e^2_\theta$',
+              'linf_err':r'$e^\infty_\theta$'
     }
 
     # Optimality bounds:

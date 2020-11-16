@@ -29,7 +29,7 @@ dolfin.set_log_level(30)
 # Dimension of problem formulation
 DIM=0
 
-# Type of boundary formulation
+# Type of boundary formulation (e.g. "DN"=Dirichlet-Neumann)
 BOUNDARY_FORMULATION="NN"
 
 # Two basic types of implementations
@@ -480,6 +480,13 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
         # Set timesets for simulation, data output and plotting
         sim_timeset, dat_timeset, plot_timeset=stefan_loop_timesets()
 
+        # Define progress bar
+        numprogresspoints=10
+        
+        idx_progresspoints=np.round(np.linspace(0,len(sim_timeset)-1,numprogresspoints)).astype(int)
+        
+        progressbar_timeset=sim_timeset[idx_progresspoints]
+
         # Set data for initial step
         theta_analytic.t = t_0
         stefan_form_update_previous(t_0)
@@ -605,17 +612,18 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
         # ==============================
         
         # Print information about simulation parameters:
-        print(" ======================\n",
-              "Simulation parameters:\n",
-              "lambda = " + str(lambda_) + ",\n",
-              "Q_0 = " + str(prm.q_0) + ",\n",
-              "----------------------\n",
-              "Discretization parameters:\n",
-              "eps = " + str(float(em.EPS)) + ", (h_eps = " + str(h_eps) + " with C_eps = " + str(em.C_EPS) + "),\n",
-              "h_max = " + str(hmax) + ", h_min = " + str(hmin) + ",\n"
-              "dt = " + str(dt) + " (C_CFL = " + str(em.C_CFL) + '),\n',
-              "======================\n",
-        )
+        if rank==0:
+            print(" ======================\n",
+                  "Simulation parameters:\n",
+                  "lambda = " + str(lambda_) + ",\n",
+                  "Q_0 = " + str(prm.q_0) + ",\n",
+                  "----------------------\n",
+                  "Discretization parameters:\n",
+                  "eps = " + str(float(em.EPS)) + ", (h_eps = " + str(h_eps) + " with C_eps = " + str(em.C_EPS) + "),\n",
+                  "h_max = " + str(hmax) + ", h_min = " + str(hmin) + ",\n"
+                  "dt = " + str(dt) + " (C_CFL = " + str(em.C_CFL) + '),\n',
+                  "======================\n",
+            )
 
         index = 0
 
@@ -726,6 +734,14 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                     file_.write(row)
                 file_.close()
                 index=index+1
+
+            # Progress bar
+            if rank==0 and t in progressbar_timeset:
+                progress=int((np.where(progressbar_timeset==t)[0]+1)/len(progressbar_timeset)*100)
+                print("Progress: "+str(progress)+"% complete")
+                
+
+        # END OF THE TIME LOOP
         #======================
 
         if SAVE_FRONT_POS_TXT:
@@ -832,8 +848,8 @@ def stefan_convergence():
     
     meshres={
     1:[100,1000,10000],
-    2:[25],
-    3:[0.05,0.025,0.01]
+    2:[22,220],
+    3:[0.05,0.025]
     }
 
     with open('./out/data/'+str(DIM)+'d/convergence.csv', 'w') as csvfile:
