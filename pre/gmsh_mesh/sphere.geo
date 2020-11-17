@@ -17,4 +17,4 @@ Physical Surface(2) = {1};
 //+
 Physical Volume(3) = {1};
 //+
-Characteristic Length {6, 5, 4, 2, 3, 1} = 0.03;
+Characteristic Length {6, 5, 4, 2, 3, 1} = 0.05;

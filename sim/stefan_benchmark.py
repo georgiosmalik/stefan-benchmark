@@ -53,6 +53,9 @@ SAVE_DAT = False
 TEMP_TXT_DAT = True
 SAVE_FRONT_POS_TXT = True
 
+# Logging for cluster computing
+LOG = False
+
 # Types of simulation
 CONVERGENCE = False
 STABILITY = False
@@ -481,7 +484,7 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
         sim_timeset, dat_timeset, plot_timeset=stefan_loop_timesets()
 
         # Define progress bar
-        numprogresspoints=10
+        numprogresspoints=11
         
         idx_progresspoints=np.round(np.linspace(0,len(sim_timeset)-1,numprogresspoints)).astype(int)
         
@@ -547,6 +550,7 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
             data_py["front_pos"][method]=[]
 
         # III. Optional:
+        # Text file for double checking
         if SAVE_FRONT_POS_TXT:
             # Creating output file:
             output_file = 'out/data/'+str(DIM)+'d/data_front_pos.txt'
@@ -625,6 +629,21 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                   "======================\n",
             )
 
+            # Print this to log file also
+            if LOG:
+                with open(log_filename,"a") as log_file:
+                    log_file.write(" ======================\n"+
+                                   "Simulation parameters:\n"+
+                                   "lambda = " + str(lambda_) + ",\n"+
+                                   "Q_0 = " + str(prm.q_0) + ",\n"+
+                                   "----------------------\n"+
+                                   "Discretization parameters:\n"+
+                                   "eps = " + str(float(em.EPS)) + ", (h_eps = " + str(h_eps) + " with C_eps = " + str(em.C_EPS) + "),\n"+
+                                   "h_max = " + str(hmax) + ", h_min = " + str(hmin) + ",\n"+
+                                   "dt = " + str(dt) + " (C_CFL = " + str(em.C_CFL) + '),\n'+
+                                   "======================\n"
+                    )
+                    
         index = 0
 
         # ---------
@@ -736,9 +755,14 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                 index=index+1
 
             # Progress bar
-            if rank==0 and t in progressbar_timeset:
-                progress=int((np.where(progressbar_timeset==t)[0]+1)/len(progressbar_timeset)*100)
+            if rank==0 and t in progressbar_timeset[1:]:
+                progress=int((np.where(progressbar_timeset==t)[0])/(len(progressbar_timeset)-1)*100)
                 print("Progress: "+str(progress)+"% complete")
+
+                # Print to log txt file
+                if LOG:
+                    with open(log_filename,'a') as log_file:
+                        log_file.write("Progress: "+str(progress)+"% complete\n")
                 
 
         # END OF THE TIME LOOP
@@ -846,17 +870,27 @@ def stefan_convergence():
 
     em.C_CFL = 0.2
     
-    meshres={
-    1:[100,1000,10000],
-    2:[22,220],
-    3:[0.05,0.025]
+    convergence_params={
+        1:{"meshres":[100,1000,10000],"eps":[5.,0.5,0.05]},
+        2:{"meshres":[22,110,550],"eps":[50.,10.0,2.]}, # this results in approx 10/100/1000 elements in a radius
+        3:{"meshres":[0.05,0.04],"eps":[1,0.5]},
     }
+
+    # Log into .txt file (cluster computing)
+    global LOG
+    LOG = True
+    
+    # Creating output log file:
+    global log_filename
+    log_filename = 'out/data/'+str(DIM)+'d/log.txt'
+    log_file = open(log_filename, 'w')
+    log_file.close()
 
     with open('./out/data/'+str(DIM)+'d/convergence.csv', 'w') as csvfile:
         filewriter = csv.writer(csvfile, delimiter=';',
                                 quoting=csv.QUOTE_NONE,
         )
-
+        
         # Write method type and value of L2, Linf, deltas error norm:
         filewriter.writerow(['params',
                              'method',
@@ -864,9 +898,9 @@ def stefan_convergence():
                              'linfnorm',
                              'deltas'])
 
-    for i,nx in enumerate(meshres[DIM]):
+    for i,nx in enumerate(convergence_params[DIM]["meshres"]):
         prm.meshres[DIM]=nx
-        em.EPS.assign(50./(10**(i+1)))
+        em.EPS.assign(convergence_params[DIM]["eps"][i])
         stefan_benchmark()
 
         # Reset time-step

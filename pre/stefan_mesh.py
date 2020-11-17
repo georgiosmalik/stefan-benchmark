@@ -27,12 +27,14 @@ def stefan_mesh(dim):
         if BUILD_MESH_HDF:
         
             subprocess.call(['sed','-i',"/Characteristic Length {6, 5, 4, 2, 3, 1} = .*;/c\Characteristic Length {6, 5, 4, 2, 3, 1} = "+str(prm.meshres[3])+";",'./pre/gmsh_mesh/sphere.geo'])
+
+            subprocess.call(['sed','-i','s=dolfin-convert ./pre/gmsh_mesh/sphere.msh ./pre/gmsh_mesh/sphere.*=dolfin-convert ./pre/gmsh_mesh/sphere.msh ./pre/gmsh_mesh/sphere_'+str(prm.meshres[3])+'.xml=g','./pre/gmsh_mesh/generate_mesh.sh'])
         
             subprocess.call('./pre/gmsh_mesh/generate_mesh.sh')
             
-            return msh.meshxml("./pre/gmsh_mesh/sphere")
+            return msh.meshxml("./pre/gmsh_mesh/sphere_"+str(prm.meshres[3]))
 
-        return msh.meshhdf("./pre/gmsh_mesh/sphere")
+        return msh.meshhdf("./pre/gmsh_mesh/sphere_"+str(prm.meshres[3]))
     
     dimswitch = {
         1:stefan_mesh_1d,

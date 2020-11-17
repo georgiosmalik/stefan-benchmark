@@ -81,6 +81,13 @@ if __name__ == "__main__":
 
     elif "preprocessing" in sys.argv:
 
+        # Build mesh with specified parameter, if given
+        try:
+            nx=float(sys.argv[-1])
+            sim.stefan_benchmark.prm.meshres[3]=nx
+        except ValueError:
+            pass
+
         # Build mesh (only 3d):
         sim.stefan_benchmark.smsh.BUILD_MESH_HDF=True
         sim.stefan_benchmark.smsh.stefan_mesh(3)()
