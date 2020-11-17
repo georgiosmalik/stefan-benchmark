@@ -908,9 +908,9 @@ def stefan_convergence():
     em.C_CFL = 0.2
     
     convergence_params={
-        1:{"meshres":[10,1000,10000],"eps":[5.,0.5,0.05]},
-        2:{"meshres":[22,110,550],"eps":[50.,10.0,2.]}, # this results in approx 10/100/1000 elements in a radius
-        3:{"meshres":[0.05],"eps":[1]},
+        1:{"meshres":[100,1000,10000],"eps":[5.0,0.5,0.05]},
+        2:{"meshres":[22,110,550],"eps":[25.0,5.0,1.0]}, # this results in approx 10/100/1000 elements in a radius
+        3:{"meshres":[0.05,0.025,0.0125],"eps":[25.,12.5,6.25]},
     }
 
     # Log into .txt file (cluster computing)
