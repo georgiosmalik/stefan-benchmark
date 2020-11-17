@@ -314,9 +314,28 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
     rank=dolfin.MPI.rank(mesh.mpi_comm())
 
     # Mesh parameters:
+    # by dolfin:
     hmin = dolfin.MPI.min(mesh.mpi_comm(),mesh.hmin())
     
     hmax = dolfin.MPI.max(mesh.mpi_comm(),mesh.hmax())
+
+    # custom:
+    maxlength = 0.
+    minlength = prm.R2
+    avlength = 0
+    num_edges = 0
+    for f in dolfin.facets(mesh):
+        for e in dolfin.edges(f):
+            if (e.length()<minlength): minlength = e.length()
+            if (e.length()>maxlength): maxlength = e.length()
+            avlength = avlength + e.length()
+            num_edges = num_edges + 1
+    avlength = dolfin.MPI.sum(mesh.mpi_comm(),avlength)
+    num_edges = dolfin.MPI.sum(mesh.mpi_comm(),num_edges)
+
+    if rank==0:
+        avlength = avlength/num_edges
+        print(avlength)
     
     def stefan_loop_timesets():
 
@@ -626,6 +645,15 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                   "eps = " + str(float(em.EPS)) + ", (h_eps = " + str(h_eps) + " with C_eps = " + str(em.C_EPS) + "),\n",
                   "h_max = " + str(hmax) + ", h_min = " + str(hmin) + ",\n"
                   "dt = " + str(dt) + " (C_CFL = " + str(em.C_CFL) + '),\n',
+                  "----------------------\n",
+                  "Mesh parameters:\n",
+                  "minimal edge length: " + str(minlength)+",\n",
+                  "maximal edge length: " + str(maxlength)+",\n",
+                  "average edge length: " + str(avlength)+",\n",
+                  "number of cells: " + str(mesh.num_cells())+",\n",
+                  "number of facets: " + str(mesh.num_facets())+",\n",
+                  "number of edges: " + str(mesh.num_edges())+",\n",
+                  "number of vertices: " + str(mesh.num_vertices())+",\n",
                   "======================\n",
             )
 
@@ -641,6 +669,15 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                                    "eps = " + str(float(em.EPS)) + ", (h_eps = " + str(h_eps) + " with C_eps = " + str(em.C_EPS) + "),\n"+
                                    "h_max = " + str(hmax) + ", h_min = " + str(hmin) + ",\n"+
                                    "dt = " + str(dt) + " (C_CFL = " + str(em.C_CFL) + '),\n'+
+                                   "----------------------\n"+
+                                   "Mesh parameters:\n"+
+                                   "minimal edge length = " + str(minlength)+",\n"+
+                                   "maximal edge length = " + str(maxlength)+",\n"+
+                                   "average edge length: " + str(avlength)+",\n"+
+                                   "number of cells: " + str(mesh.num_cells())+",\n"+
+                                   "number of facets: " + str(mesh.num_facets())+",\n"+
+                                   "number of edges: " + str(mesh.num_edges())+",\n"+
+                                   "number of vertices: " + str(mesh.num_vertices())+",\n"+
                                    "======================\n"
                     )
                     
@@ -871,9 +908,9 @@ def stefan_convergence():
     em.C_CFL = 0.2
     
     convergence_params={
-        1:{"meshres":[100,1000,10000],"eps":[5.,0.5,0.05]},
+        1:{"meshres":[10,1000,10000],"eps":[5.,0.5,0.05]},
         2:{"meshres":[22,110,550],"eps":[50.,10.0,2.]}, # this results in approx 10/100/1000 elements in a radius
-        3:{"meshres":[0.05,0.04],"eps":[1,0.5]},
+        3:{"meshres":[0.05],"eps":[1]},
     }
 
     # Log into .txt file (cluster computing)
