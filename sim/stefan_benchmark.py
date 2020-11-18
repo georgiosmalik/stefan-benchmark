@@ -332,10 +332,7 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
             num_edges = num_edges + 1
     avlength = dolfin.MPI.sum(mesh.mpi_comm(),avlength)
     num_edges = dolfin.MPI.sum(mesh.mpi_comm(),num_edges)
-
-    if rank==0:
-        avlength = avlength/num_edges
-        print(avlength)
+    avlength = avlength/num_edges
     
     def stefan_loop_timesets():
 
@@ -838,7 +835,7 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                                             quoting=csv.QUOTE_NONE,
                     )
                     
-                    params=r'\makecell{$\hcell$=\numprint{'+eformat(hmax,1,1)+r'}, $\epsilon$=\numprint{'+eformat(float(em.EPS),1,1)+r'} \\ ($\delt$=\numprint{'+eformat(dt,1,1)+'})}'
+                    params=r'\makecell{$\overline{\hcell}$=\numprint{'+eformat(avlength,1,1)+r'}, $\epsilon$=\numprint{'+eformat(float(em.EPS),1,1)+r'} \\ ($\delt$=\numprint{'+eformat(dt,1,1)+'})}'
                     for method in sim:
                         filewriter.writerow([params,
                                              method,
@@ -909,7 +906,7 @@ def stefan_convergence():
     
     convergence_params={
         1:{"meshres":[100,1000,10000],"eps":[5.0,0.5,0.05]},
-        2:{"meshres":[22,110,550],"eps":[25.0,5.0,1.0]}, # this results in approx 10/100/1000 elements in a radius
+        2:{"meshres":[31,155,775],"eps":[25.0,5.0,1.0]}, # this results in approx 10/100/1000 elements in a radius
         3:{"meshres":[0.05,0.025,0.0125],"eps":[25.,12.5,6.25]},
     }
 
