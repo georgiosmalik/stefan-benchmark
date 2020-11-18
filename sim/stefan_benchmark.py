@@ -907,7 +907,7 @@ def stefan_convergence():
     convergence_params={
         1:{"meshres":[100,1000,10000],"eps":[5.0,0.5,0.05]},
         2:{"meshres":[31,155,775],"eps":[25.0,5.0,1.0]}, # this results in approx 10/100/1000 elements in a radius
-        3:{"meshres":[0.05,0.025,0.0125],"eps":[25.,12.5,6.25]},
+        3:{"meshres":[0.09,0.03,0.01],"eps":[60.,20,6.7]},
     }
 
     # Log into .txt file (cluster computing)
