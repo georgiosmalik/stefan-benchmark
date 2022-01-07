@@ -14,7 +14,7 @@ from ufl import tanh
 # ------------------------------------
 
 # Temperature mollification parameter (default EPS = 0.5)
-EPS = dolfin.Constant(0.5)
+EPS = dolfin.Constant(0.05)
 
 # Relaxation parameter for optimal space discretization bound
 C_EPS = 1.
@@ -24,7 +24,7 @@ DEG = 'Cinf'
 # ====================================
 
 # CFL condition relaxation parameter
-C_CFL = 0.2
+C_CFL = 1.
 
 # -----------------------------------------
 # Numerical approximations of distributions
