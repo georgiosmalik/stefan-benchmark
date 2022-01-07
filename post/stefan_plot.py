@@ -29,6 +29,9 @@ linestyle={"analytic":{"color":mplt.mypalette[0],
            "EHCreg":{"color":mplt.mypalette[2],
                  "marker":'v'
            },
+           "EHCpi":{"color":mplt.mypalette[2],
+                 "marker":'v'
+           },
            "TTM":{"color":mplt.mypalette[3],
                   "marker":'s'
            }
@@ -152,8 +155,6 @@ def graph_temp():
     # Save the figure:
     h_max=data["disc_params"]["h_max"]
     h_min=data["disc_params"]["h_min"]
-    print(h_min)
-    exit()
     
     eps=data["disc_params"]["eps"]
     h_eps=data["disc_params"]["h_eps"]
