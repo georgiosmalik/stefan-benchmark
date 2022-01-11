@@ -33,7 +33,7 @@ DIM=0
 BOUNDARY_FORMULATION="DD"
 
 # Two basic types of implementations
-METHODS = ['EHC', 'EHCpi']
+METHODS = ['EHCpi', 'EHCpi-prj']
 
 # Degree of finite element spaces:
 DEGREE = 1
@@ -463,7 +463,7 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                 solver = dolfin.NonlinearVariationalSolver(problem)
                 solver.parameters["newton_solver"] = NEWTON_PARAMS
                     
-                return solver, theta, theta_k
+                return solver, theta, theta_k, theta_k
 
             # Define problem form for post iterative correction ehc:
             def stefan_form_ehcpi():
@@ -522,11 +522,12 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                 solver = dolfin.NonlinearVariationalSolver(problem)
                 solver.parameters["newton_solver"]=NEWTON_PARAMS
                     
-                return solver, theta, theta_k
+                return solver, theta, theta_k, theta_k
             
             methodswitch = {
                 'EHC':stefan_form_ehc,
-                'EHCpi':stefan_form_ehc, # (post iterative)
+                'EHCpi':stefan_form_ehcpi, # (post iterative)
+                'EHCpi-prj':stefan_form_ehcpi, # (post iterative)
                 'TTM':stefan_form_cao
             }
             return methodswitch.get(method,method+" is not implemented. Consider 'EHC', or 'TTM'.")
@@ -549,9 +550,8 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
         sim={}
         for method in methods:
             
-            (solver, theta, theta_k)=stefan_problem_form(method)()
+            sim[method] = stefan_problem_form(method)()
             
-            sim[method]=(solver,theta,theta_k)
             sim[method][1].rename("Temperature by "+method,"theta_"+method)
 
             sim[method][1].set_allow_extrapolation(True)
@@ -775,15 +775,12 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                                       degree = 1)
 
             # Define initial enthalpy:
-            # sim["EHCpi"][3].assign(dolfin.interpolate(h_exp,sim["EHCpi"][3].function_space()))
+            sim["EHCpi"][3].assign(dolfin.interpolate(h_exp,sim["EHCpi"][3].function_space()))
 
-            h_k = dolfin.project(h_eff(sim["EHCpi"][2]), sim["EHCpi"][2].function_space())
+        if "EHCpi-prj" in sim:
 
-            _h = dolfin.TrialFunction(sim["EHCpi"][1].function_space())
-            h_ = dolfin.TestFunction(sim["EHCpi"][1].function_space())
-            h = dolfin.Function(sim["EHCpi"][1].function_space())
-
-            dx2 = dolfin.Measure("dx", sim["EHCpi"][1].function_space().mesh())
+            sim["EHCpi-prj"][3].assign(dolfin.project(h_eff(sim["EHCpi-prj"][2]),
+                                                      sim["EHCpi-prj"][3].function_space()))
         # /DBG (post iterative)
         
         for t in np.nditer(sim_timeset):
@@ -808,83 +805,21 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                 # DBG (post iterative)/
                 if method == 'EHCpi' and True:
 
-                    # c_eff_diff = dolfin.project((THETA*c_p_eff(sim[method][1],deg='Cinf') + \
-                    #                                (1-THETA)*c_p_eff(sim[method][2],deg='Cinf')),
-                    #                             sim[method][1].function_space())
-
-                    # c_code = "theta < (theta_m - eps) ? cp_s : " + \
-                    #          "(theta > (theta_m + eps) ? cp_l : cp_m + L_m)"
-
-                    # c_exp = dolfin.Expression(c_code,
-                    #                           theta = sim[method][1],
-                    #                           theta_m = prm.theta_m,
-                    #                           eps = em.EPS,
-                    #                           cp_s = prm.cp_s,
-                    #                           cp_l = prm.cp_l,
-                    #                           cp_m = prm.cp_m,
-                    #                           L_m = prm.L_m,
-                    #                           degree = 3)
-
-                    # c_fun = dolfin.interpolate(c_exp,
-                    #                            sim[method][1].function_space())
-
-                    # dolfin.plot(c_fun, label = "c expression", mesh = mesh)
-                    # dolfin.plot(c_p_eff(theta, deg = "disC"), mesh = mesh, label = "c ufl")
-                    # mplt.plt.legend()
-                    # mplt.plt.show()
-
-                    # Enthalpy interpolation:
+                    # Update enthalpy function h_k:
                     h_exp.theta = sim[method][1]
 
-                    h_fun = dolfin.interpolate(h_exp,
-                                               sim[method][1].function_space())
+                    sim["EHCpi"][3].assign(dolfin.interpolate(h_exp,
+                                                              sim[method][3].function_space()))
 
-                    # Assign new value for last step enthalpy:
-                    h_k.assign(h_fun)
+                if method == 'EHCpi-prj' and True:
 
-                    # Enthalpy projection via dolfin project:
-                    h_corr = dolfin.project(h_k + (THETA*c_p_eff(sim[method][1],deg='Cinf') + \
-                                                   (1-THETA)*c_p_eff(sim[method][2],deg='Cinf'))* \
-                                            (sim[method][1] - sim[method][2]),
-                                            sim[method][1].function_space(),
-                                            solver_type="cg",
-                                            preconditioner_type="hypre_amg")
+                    # Update enthalpy function h_k:
+                    sim[method][3].assign(dolfin.project(h_eff(sim[method][1]),
+                                                         sim[method][3].function_space()))
 
-                    # Enthalpy projection via form:
-                    dolfin.solve(_h*h_*dx2 == (h_k + (THETA*c_p_eff(sim[method][1],deg='Cinf') + \
-                                                       (1-THETA)*c_p_eff(sim[method][2],deg='Cinf'))* \
-                                                      (sim[method][1] - sim[method][2]))*h_*dx2, h)
+                    h_local = sim[method][3].vector().get_local()
 
-                    # dolfin.solve(_h*h_*dx2 == h_k*h_*dx2, h)
-
-                    # dolfin.plot(h_fun, label = "h expression", mesh = mesh)
-                    # dolfin.plot(h_eff(theta), mesh = mesh, label = "h ufl")
-                    # dolfin.plot(h_corr, mesh = mesh, label = "h proj", marker = "x")
-                    # dolfin.plot(h, label = "h form proj")
-                    # mplt.plt.legend()
-                    # mplt.plt.show()
-
-                    h_corr = h_fun
-
-                    # dolfin.plot(h_corr, label = "enthalpy")
-                    # mplt.plt.legend()
-                    # mplt.plt.show()
-
-                    # h_corr = dolfin.interpolate(dolfin.Expression("x[0]*x[0]", degree = 2),
-                    #                             sim[method][1].function_space())
-
-                    # dolfin.plot(h_corr, label = "enthalpy")
-                    # mplt.plt.legend()
-                    # mplt.plt.show()
-
-                    # Get local coordinates of enthalpy correction:
-                    h_corr_vec = np.array(h_corr.vector().get_local())
-
-                    # Compute temperature correction:
-                    theta_corr = h_eff_inv_vec(h_corr_vec)
-
-                    # Assign corrected value for temperature
-                    sim[method][1].vector()[:] = theta_corr
+                    sim[method][1].vector()[:] = h_eff_inv_vec(h_local)
                     
                 # /DBG (post iterative)
 

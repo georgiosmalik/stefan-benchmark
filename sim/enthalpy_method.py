@@ -24,7 +24,7 @@ DEG = 'Cinf'
 # ====================================
 
 # CFL condition relaxation parameter
-C_CFL = 1.
+C_CFL = 0.1
 
 # -----------------------------------------
 # Numerical approximations of distributions
