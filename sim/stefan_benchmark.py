@@ -757,15 +757,15 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
 
             return theta_vec
 
+        h_code = "theta < (theta_m - eps) ? cp_s*(theta - (theta_m - eps))" + \
+                 " : (theta > (theta_m + eps) ? cp_m*2*eps + L_m + cp_l*(theta - (theta_m + eps))" + \
+                 " : (cp_m + L_m/(2*eps))*(theta - (theta_m - eps)))"
+
         # Compute initial enthalpy of the system:
         if "EHCpi" in sim:
 
-            h_code = "theta < (theta_m - eps) ? cp_s*(theta - (theta_m - eps))" + \
-                     " : (theta > (theta_m + eps) ? cp_m*2*eps + L_m + cp_l*(theta - (theta_m + eps))" + \
-                     " : (cp_m + L_m/(2*eps))*(theta - (theta_m - eps)))"
-
             h_exp = dolfin.Expression(h_code,
-                                      theta = sim[method][2],
+                                      theta = sim["EHCpi"][2],
                                       theta_m = prm.theta_m,
                                       eps = em.EPS,
                                       cp_s = prm.cp_s,
@@ -779,7 +779,9 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
 
         if "EHCpi-prj" in sim:
 
-            sim["EHCpi-prj"][3].assign(dolfin.project(h_eff(sim["EHCpi-prj"][2]),
+            h_exp.theta = sim["EHCpi-prj"][2]
+
+            sim["EHCpi-prj"][3].assign(dolfin.project(h_exp,
                                                       sim["EHCpi-prj"][3].function_space()))
         # /DBG (post iterative)
         
@@ -814,7 +816,9 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                 if method == 'EHCpi-prj' and True:
 
                     # Update enthalpy function h_k:
-                    sim[method][3].assign(dolfin.project(h_eff(sim[method][1]),
+                    h_exp.theta = sim[method][1]
+                    
+                    sim[method][3].assign(dolfin.project(h_exp,
                                                          sim[method][3].function_space()))
 
                     h_local = sim[method][3].vector().get_local()
