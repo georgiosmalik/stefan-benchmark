@@ -30,13 +30,13 @@ dolfin.set_log_level(30)
 DIM=0
 
 # Type of boundary formulation (e.g. "DN"=Dirichlet-Neumann)
-BOUNDARY_FORMULATION="NN"
+BOUNDARY_FORMULATION="DD"
 
 # Two basic types of implementations
-METHODS=['EHC','EHCpi']
+METHODS = ['EHC', 'EHCpi']
 
 # Degree of finite element spaces:
-DEGREE=1
+DEGREE = 1
 
 # Starting and ending radius of simulation
 R_START=0.2
@@ -449,7 +449,7 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                 q_form, q_form_k, bc_form=stefan_boundary_values(theta_,bcs)
 
                 # Partial THETA time discretization scheme:
-                F = (k_eff(theta, deg = 'C0')*dolfin.inner(dolfin.grad(theta), dolfin.grad(theta_))*dx +
+                F = (k_eff(theta_k, deg = 'C0')*dolfin.inner(dolfin.grad(theta), dolfin.grad(theta_))*dx +
                      prm.rho/dt*(THETA*c_p_eff(theta,deg='Cinf')+(1-THETA)*c_p_eff(theta_k,deg='Cinf'))*(dolfin.inner(theta,theta_)-dolfin.inner(theta_k, theta_))*dx - sum(q_form))
 
                 # Full THETA time discretization scheme:
@@ -461,7 +461,7 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                 problem = dolfin.NonlinearVariationalProblem(F,theta,bcs=bc_form,J=dolfin.derivative(F,theta))
                     
                 solver = dolfin.NonlinearVariationalSolver(problem)
-                solver.parameters["newton_solver"]=NEWTON_PARAMS
+                solver.parameters["newton_solver"] = NEWTON_PARAMS
                     
                 return solver, theta, theta_k
 
@@ -471,39 +471,33 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                 # Define functions and spaces for temperature:
                 (T,bcs,theta,_theta,theta_)=stefan_function_spaces()
 
-                # Define functions for enthalpy
-                _h = dolfin.TrialFunction(T)
-                h_ = dolfin.TestFunction(T)
-
                 # Enthalpy function for solution:
-                h = dolfin.Function(T)
                 h_k = dolfin.Function(T)
                 
                 # Set initial condition for temperature:
-                theta_k = dolfin.project(theta_analytic,T,solver_type="cg",preconditioner_type="hypre_amg")
-
-                # Set initial condition for enthalpy:
-                h_k = dolfin.project(h_eff(theta_k), T)
+                theta_k = dolfin.project(theta_analytic,
+                                         T,
+                                         solver_type="cg",
+                                         preconditioner_type="hypre_amg")
 
                 # Set boundary terms
                 q_form, q_form_k, bc_form=stefan_boundary_values(theta_,bcs)
 
-                # Partial THETA time discretization scheme:
-                F = (k_eff(theta, deg = 'C0')*dolfin.inner(dolfin.grad(theta), dolfin.grad(theta_))*dx +
-                     prm.rho/dt*(THETA*c_p_eff(theta,deg='Cinf')+(1-THETA)*c_p_eff(theta_k,deg='Cinf'))*(dolfin.inner(theta,theta_)-dolfin.inner(theta_k, theta_))*dx - sum(q_form))
+                # Define heat capacity (post-iterative):
+                c_k = dolfin.sqrt(dolfin.inner(dolfin.grad(h_k), dolfin.grad(h_k))/ \
+                                  dolfin.inner(dolfin.grad(theta_k), dolfin.grad(theta_k)))
 
-                # Full THETA time discretization scheme:
-                # F = (THETA*(k_eff(theta, deg = 'C0')*dolfin.inner(dolfin.grad(theta), dolfin.grad(theta_))*dx +
-                #             prm.rho/dt*c_p_eff(theta,deg='C0')*(dolfin.inner(theta,theta_)-dolfin.inner(theta_k,theta_))*dx - sum(q_form)) +
-                #      (1-THETA)*(k_eff(theta_k, deg = 'C0')*dolfin.inner(dolfin.grad(theta_k), dolfin.grad(theta_))*dx +
-                #                 prm.rho/dt*c_p_eff(theta_k,deg='C0')*(dolfin.inner(theta, theta_) - dolfin.inner(theta_k,theta_))*dx - sum(q_form_k)))
+                # Explicit time discretization:
+                F = (k_eff(theta_k, deg = 'C0')*dolfin.inner(dolfin.grad(theta), dolfin.grad(theta_))*dx + \
+                     prm.rho/dt*c_k* \
+                     (dolfin.inner(theta,theta_)-dolfin.inner(theta_k, theta_))*dx - sum(q_form))
 
                 problem = dolfin.NonlinearVariationalProblem(F,theta,bcs=bc_form,J=dolfin.derivative(F,theta))
                     
                 solver = dolfin.NonlinearVariationalSolver(problem)
                 solver.parameters["newton_solver"]=NEWTON_PARAMS
                     
-                return solver, theta, theta_k
+                return solver, theta, theta_k, h_k
 
             def stefan_form_cao():
                 # Temperature transforming model (Cao,1991)
@@ -779,8 +773,9 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                                       cp_m = prm.cp_m,
                                       L_m = prm.L_m,
                                       degree = 1)
-            
-            # h_k = dolfin.interpolate(h_exp,sim["EHC"][2].function_space())
+
+            # Define initial enthalpy:
+            # sim["EHCpi"][3].assign(dolfin.interpolate(h_exp,sim["EHCpi"][3].function_space()))
 
             h_k = dolfin.project(h_eff(sim["EHCpi"][2]), sim["EHCpi"][2].function_space())
 
@@ -862,12 +857,12 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
 
                     # dolfin.solve(_h*h_*dx2 == h_k*h_*dx2, h)
 
-                    dolfin.plot(h_fun, label = "h expression", mesh = mesh)
-                    dolfin.plot(h_eff(theta), mesh = mesh, label = "h ufl")
-                    dolfin.plot(h_corr, mesh = mesh, label = "h proj", marker = "x")
-                    dolfin.plot(h, label = "h form proj")
-                    mplt.plt.legend()
-                    mplt.plt.show()
+                    # dolfin.plot(h_fun, label = "h expression", mesh = mesh)
+                    # dolfin.plot(h_eff(theta), mesh = mesh, label = "h ufl")
+                    # dolfin.plot(h_corr, mesh = mesh, label = "h proj", marker = "x")
+                    # dolfin.plot(h, label = "h form proj")
+                    # mplt.plt.legend()
+                    # mplt.plt.show()
 
                     h_corr = h_fun
 
@@ -1003,10 +998,15 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
         #======================
 
         # DBG/
-        # for method in sim:
-        #     dolfin.plot(sim[method][1], label = method)
-        # mplt.plt.legend()
-        # mplt.plt.show()
+        for method in sim:
+            dolfin.plot(sim[method][1], label = method)
+        theta_analytic_proj=dolfin.project(theta_analytic,
+                                           T,
+                                           solver_type="cg",
+                                           preconditioner_type="hypre_amg")
+        dolfin.plot(theta_analytic_proj, label = "analytic")
+        mplt.plt.legend()
+        mplt.plt.show()
         # /DBG
 
         if SAVE_FRONT_POS_TXT:
