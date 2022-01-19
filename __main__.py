@@ -37,8 +37,8 @@ if __name__ == "__main__":
     sim.stefan_benchmark.prm.R1=0.1*(dim-1)
 
     # Set timespan of simulation
-    sim.stefan_benchmark.R_START = sim.stefan_benchmark.prm.R1 + 0.2
-    sim.stefan_benchmark.R_END = sim.stefan_benchmark.prm.R2 - 0.2
+    # sim.stefan_benchmark.R_START = sim.stefan_benchmark.prm.R1 + 0.2
+    # sim.stefan_benchmark.R_END = sim.stefan_benchmark.prm.R2 - 0.2
     
         
     if "convergence" in sys.argv:

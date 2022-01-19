@@ -330,13 +330,17 @@ def graph_stability1p():
         ax.set_xlabel(r"$\epsilon\,[K]$")
         ax.invert_xaxis()
 
+        # Set log scale for y (error):
         ax.set_yscale('log')
+
+        # Set log scale for x (eps):
+        ax.set_xscale('log')
 
         ax.legend(frameon=True, fancybox=False, borderaxespad=0.)
         
         fig.set_size_inches(mplt.set_size(345/2.,ratio=1),forward=True)
         
-        fig.savefig('./out/fig/'+str(DIM)+'d/stability1p_'+method+'(h='+'{0:>1.2e}'.format(h)+',C_CFL='+'{0:>1.2e}'.format(c_cfl)+').pdf',
+        fig.savefig('./out/fig/'+str(DIM)+'d/stability1p_'+method+'(h='+'{0:>1.2e}'.format(h)+',C_CFL='+'{0:>1.2e}'.format(c_cfl)+',log-log).pdf',
                     format='pdf',
                     bbox_inches='tight',
                     transparent=True
@@ -362,10 +366,10 @@ def graph_stability2p():
         vals[-1,0:3] = mplt.mypalette[0]
         return ListedColormap(vals)
 
-    mycmp = {"TTM":cmp_(1,"TTM"),"EHC":cmp_(1,"EHC")}
+    mycmp = {"TTM":cmp_(1,"TTM"),"EHC":cmp_(1,"EHC"),"EHCpi":cmp_(1,"EHCpi")}
 
-    meshres = list(map(float,list(data['EHC'].keys())))
-    timestep = list(map(float,list(data['EHC'][list(data['EHC'].keys())[0]].keys())))
+    meshres = list(map(float,list(data['EHCpi'].keys())))
+    timestep = list(map(float,list(data['EHCpi'][list(data['EHCpi'].keys())[0]].keys())))
 
     # zlabel dictionary
     zlabel = {'fp_err':r'$e_s$',

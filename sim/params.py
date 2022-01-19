@@ -26,7 +26,7 @@ kappa_s = k_s/(rho*cp_s)    # Heat diffusivity of ice
 # 2d,3d
 R1 = 0.1
 R2 = 1.
-meshres = {1:200,2:220,3:0.002}      # 2d: 220 results in h_max=0.009
+meshres = {1:1000,2:220,3:0.002}      # 2d: 220 results in h_max=0.009
 # Physical:
 q_0 = 2e5                           # source heat flux in origin (value for 1d)
 theta_0 = 373.                      # heating temperature for 1D
