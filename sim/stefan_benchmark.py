@@ -20,7 +20,7 @@ import time
 
 dolfin.parameters['form_compiler']['quadrature_degree']=4
 
-dolfin.set_log_level(30)
+dolfin.set_log_level(50)
 
 #------------------------------------
 # Global parameters of the simulation
@@ -33,7 +33,10 @@ DIM=0
 BOUNDARY_FORMULATION = "DD"
 
 # Two basic types of implementations
-METHODS = ['EHCpi']
+# METHODS = ['EHCpi2sTemp']
+
+# Test methods for iterative correction ("AppHC", "Tapparentlinear")
+METHODS = ["Tapparentlinear"]
 
 # Degree of finite element spaces:
 DEGREE = 1
@@ -61,7 +64,7 @@ CONVERGENCE = False
 STABILITY = False
 
 # Temporal discretization scheme for EHC model (THETA = 0.5 is Crank-Nicholson, THETA = 1 is fully implicit)
-THETA = 0.5
+THETA = 0.0
 # ===================================
 
 # ------------------------------------------------------
@@ -473,6 +476,154 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                     
                 return solver, theta, theta_k
 
+            # Define problem form for post-iterative correction ehc (two-step method):
+            def stefan_form_ehcpi_2step():
+
+                # Define functions and spaces for temperature:
+                (T,bcs,theta,_theta,theta_)=stefan_function_spaces()
+
+                # Define functions and spaces for enthalpy difference (DG0):
+                DH_ele  = dolfin.FiniteElement("DG", mesh.ufl_cell(), 0)
+                DH = dolfin.FunctionSpace(mesh, DH_ele)
+
+                # Enthalpy function for solution:
+                h_n = dolfin.Function(T)
+
+                # Set initial condition for temperature:
+                theta_n = dolfin.project(theta_analytic,
+                                         T,
+                                         solver_type="cg",
+                                         preconditioner_type="hypre_amg")
+
+                # Set boundary terms
+                q_form, q_form_n, bc_form=stefan_boundary_values(theta_,bcs)
+
+                # Define heat capacity (post-iterative):
+                c_n = dolfin.sqrt(dolfin.inner(dolfin.grad(h_n), dolfin.grad(h_n))/ \
+                                  dolfin.inner(dolfin.grad(theta_n), dolfin.grad(theta_n)))
+
+                # Explicit time discretization:
+                F = (k_eff(theta_n, deg = 'C0')*dolfin.inner(dolfin.grad(theta), dolfin.grad(theta_))*dx + \
+                     prm.rho/dt*c_n* \
+                     (dolfin.inner(theta,theta_)-dolfin.inner(theta_n, theta_))*dx - sum(q_form))
+
+                problem = dolfin.NonlinearVariationalProblem(F,
+                                                             theta,
+                                                             bcs = bc_form,
+                                                             J = dolfin.derivative(F,theta))
+
+                solver = dolfin.NonlinearVariationalSolver(problem)
+                solver.parameters["newton_solver"] = NEWTON_PARAMS
+
+                return solver, theta, theta_n, h_n, c_n, DH
+
+            # Define problem form for post-iterative correction ehc (two-step method, temporal heat capacity):
+            def stefan_form_ehcpi_2step_temp():
+
+                # Define functions and spaces for temperature:
+                (T,bcs,theta,_theta,theta_)=stefan_function_spaces()
+
+                # Enthalpy function for solution:
+                h_n = dolfin.Function(T)
+
+                h_nminus1 = dolfin.Function(T)
+
+                # Set initial condition for temperature (t = T_START - DT):
+                theta_analytic.t += -dt
+                
+                theta_nminus1 = dolfin.project(theta_analytic,
+                                               T,
+                                               solver_type="cg",
+                                               preconditioner_type="hypre_amg")
+
+                # Set initial condition for temperature (t = T_START):
+                theta_analytic.t += dt
+
+                # Set initial condition for temperature:
+                theta_n = dolfin.project(theta_analytic,
+                                         T,
+                                         solver_type="cg",
+                                         preconditioner_type="hypre_amg")
+
+                # Set boundary terms
+                q_form, q_form_n, bc_form=stefan_boundary_values(theta_,bcs)
+
+                # Define heat capacity (post-iterative):
+                # c_n = dolfin.Function(T)
+                c_n = (h_n - h_nminus1)/(theta_n - theta_nminus1)
+
+                # Explicit time discretization:
+                F = (k_eff(theta_n, deg = 'C0')*dolfin.inner(dolfin.grad(theta), dolfin.grad(theta_))*dx + \
+                     prm.rho/dt*c_n* \
+                     (dolfin.inner(theta,theta_)-dolfin.inner(theta_n, theta_))*dx - sum(q_form))
+
+                problem = dolfin.NonlinearVariationalProblem(F,
+                                                             theta,
+                                                             bcs = bc_form,
+                                                             J = dolfin.derivative(F,theta))
+
+                solver = dolfin.NonlinearVariationalSolver(problem)
+                solver.parameters["newton_solver"] = NEWTON_PARAMS
+
+                return solver, theta, theta_n, theta_nminus1, h_n, h_nminus1, c_n
+
+            # Define problem form for post-iterative correction ehc (three-step method):
+            def stefan_form_ehcpi_3step():
+
+                # Define functions and spaces for temperature:
+                (T,bcs,theta,_theta,theta_)=stefan_function_spaces()
+
+                # Enthalpy function for solution:
+                h_nminus1 = dolfin.Function(T)
+                
+                h_n = dolfin.Function(T)
+
+                # Set initial condition for temperature (t = T_START - DT):
+                theta_analytic.t += -dt
+                
+                theta_nminus1 = dolfin.project(theta_analytic,
+                                               T,
+                                               solver_type="cg",
+                                               preconditioner_type="hypre_amg")
+
+                # Set initial condition for temperature (t = T_START):
+                theta_analytic.t += dt
+
+                # Set initial condition for temperature:
+                theta_n = dolfin.project(theta_analytic,
+                                         T,
+                                         solver_type="cg",
+                                         preconditioner_type="hypre_amg")
+
+                # Set boundary terms
+                q_form, q_form_n, bc_form = stefan_boundary_values(theta_,bcs)
+
+                # Define heat capacity (post-iterative):
+                c_n = dolfin.sqrt(dolfin.inner(dolfin.grad(h_n), dolfin.grad(h_n))/ \
+                                  dolfin.inner(dolfin.grad(theta_n), dolfin.grad(theta_n)))
+
+                # Define heat capacity (post-iterative, temporal technique):
+                # c_n = (h_n - h_nminus1)/(theta_n - theta_nminus1)
+
+                c_nminus1 = dolfin.sqrt(dolfin.inner(dolfin.grad(h_nminus1), dolfin.grad(h_nminus1))/ \
+                                  dolfin.inner(dolfin.grad(theta_nminus1), dolfin.grad(theta_nminus1)))
+
+                # Explicit time discretization:
+                F = (k_eff(theta_n, deg = 'C0')*dolfin.inner(dolfin.grad(theta), dolfin.grad(theta_))*dx + \
+                     prm.rho*c_n* \
+                     (dolfin.inner(3*theta - 4*theta_n + theta_nminus1,theta_)/(2*dt))*dx - sum(q_form))
+
+                problem = dolfin.NonlinearVariationalProblem(F,
+                                                             theta,
+                                                             bcs = bc_form,
+                                                             J = dolfin.derivative(F,theta))
+
+                solver = dolfin.NonlinearVariationalSolver(problem)
+                solver.parameters["newton_solver"] = NEWTON_PARAMS
+
+                return solver, theta, theta_n, theta_nminus1, h_n, h_nminus1
+
+
             # Define problem form for post iterative correction ehc (three-step method):
             def stefan_form_ehcpi():
 
@@ -480,13 +631,17 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                 (T,bcs,theta,_theta,theta_)=stefan_function_spaces()
 
                 # Define functions and spaces for enthalpy (DG0):
-                H_ele  = dolfin.FiniteElement("DG", mesh.ufl_cell(), 1)
+                H_ele  = dolfin.FiniteElement("DG", mesh.ufl_cell(), 0)
                 H = dolfin.FunctionSpace(mesh, H_ele)
 
                 # Enthalpy function for solution:
-                h_nminus1 = dolfin.Function(H)
+                h_nminus1 = dolfin.Function(T)
 
                 h_n = dolfin.Function(T)
+
+                h = dolfin.Function(T)
+                _h = dolfin.TrialFunction(T)
+                h_ = dolfin.TestFunction(T)
 
                 # Set initial condition for temperature (t = T_START - DT):
                 theta_analytic.t += -dt
@@ -516,16 +671,22 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
 
                 # Three-step time discretization:
                 F = k_eff(theta_n, deg = 'C0')*dolfin.inner(dolfin.grad(theta), dolfin.grad(theta_))*dx + \
-                                         prm.rho*c_n* \
-                                         (dolfin.inner((3*theta - 4*theta_n + theta_nminus1)/(2*dt), theta_))*dx \
-                                         - sum(q_form_nminus1)
+                    prm.rho*c_n* \
+                    (dolfin.inner((theta - theta_nminus1)/(2*dt), theta_))*dx \
+                    - sum(q_form_nminus1)
 
                 problem = dolfin.NonlinearVariationalProblem(F,theta,bcs=bc_form,J=dolfin.derivative(F,theta))
                     
                 solver = dolfin.NonlinearVariationalSolver(problem)
                 solver.parameters["newton_solver"]=NEWTON_PARAMS
+
+                # F_h = (dolfin.inner(_h-h_nminus1,h_) \
+                #        + 2*dt/prm.rho*k_eff(theta_n, deg = 'C0')\
+                #        *dolfin.inner(dolfin.grad(theta), dolfin.grad(theta_)))*dx
+
+                # problem_h = dolfin.LinearVariationalProblem(dolfin.lhs(F_h), dolfin.rhs(F_h), h)
                     
-                return solver, theta, theta_n, theta_nminus1, h_n, h_nminus1, c_n
+                return solver, theta, theta_n, theta_nminus1, h_n, h_nminus1, c_n, H
 
             def stefan_form_cao():
                 # Temperature transforming model (Cao,1991)
@@ -565,12 +726,120 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                 solver.parameters["newton_solver"]=NEWTON_PARAMS
                     
                 return solver, theta, theta_k
+
+            # Apparent heat capacity method
+            def appHeat():
+
+                # Define functions and spaces for temperature:
+                (T,bcs,theta,_theta,theta_)=stefan_function_spaces()
+
+                # Enthalpy function for solution:
+                h_n = dolfin.Function(T)
+
+                h_ast = dolfin.Function(T)
+
+                h_nminus1 = dolfin.Function(T)
+
+                # Set initial condition for temperature (t = T_START - DT):
+                theta_analytic.t += -dt
+                
+                theta_nminus1 = dolfin.project(theta_analytic,
+                                               T,
+                                               solver_type="cg",
+                                               preconditioner_type="hypre_amg")
+
+                # Set initial condition for temperature (t = T_START):
+                theta_analytic.t += dt
+
+                # Set initial condition for temperature:
+                theta_n = dolfin.project(theta_analytic,
+                                         T,
+                                         solver_type="cg",
+                                         preconditioner_type="hypre_amg")
+
+                theta_ast = dolfin.Function(T)
+
+                # Set boundary terms
+                q_form, q_form_n, bc_form = stefan_boundary_values(theta_,bcs)
+
+                # Define heat capacity (C_app):
+                c_app = (h_ast - h_nminus1)/(theta_ast - theta_nminus1)
+
+                # Explicit time discretization:
+                F = (k_eff(theta_n, deg = 'C0')*dolfin.inner(dolfin.grad(theta), dolfin.grad(theta_))*dx + \
+                     prm.rho/dt*c_app* \
+                     (dolfin.inner(theta,theta_)-dolfin.inner(theta_n, theta_))*dx - sum(q_form))
+
+                problem = dolfin.NonlinearVariationalProblem(F,
+                                                             theta,
+                                                             bcs = bc_form,
+                                                             J = dolfin.derivative(F,theta))
+
+                solver = dolfin.NonlinearVariationalSolver(problem)
+                solver.parameters["newton_solver"] = NEWTON_PARAMS
+
+                return solver, theta, theta_n, theta_nminus1, h_n, h_nminus1, c_app, theta_ast, h_ast
+
+            # Apparent heat capacity method with correction (not working):
+            def appHeat_corr():
+
+                # Define functions and spaces for temperature:
+                (T,bcs,theta,_theta,theta_)=stefan_function_spaces()
+
+                # Enthalpy function for solution:
+                h_n = dolfin.Function(T)
+
+                h_nminus1 = dolfin.Function(T)
+
+                # Set initial condition for temperature (t = T_START - DT):
+                theta_analytic.t += -dt
+                
+                theta_nminus1 = dolfin.project(theta_analytic,
+                                               T,
+                                               solver_type="cg",
+                                               preconditioner_type="hypre_amg")
+
+                # Set initial condition for temperature (t = T_START):
+                theta_analytic.t += dt
+
+                # Set initial condition for temperature:
+                theta_n = dolfin.project(theta_analytic,
+                                         T,
+                                         solver_type="cg",
+                                         preconditioner_type="hypre_amg")
+
+                # Set boundary terms
+                q_form, q_form_n, bc_form=stefan_boundary_values(theta_,bcs)
+
+                # Define heat capacity (post-iterative):
+                c_n = dolfin.Function(T)
+
+                # Explicit time discretization:
+                F = (k_eff(theta_n, deg = 'C0')*dolfin.inner(dolfin.grad(theta), dolfin.grad(theta_))*dx + \
+                     prm.rho/dt*c_n* \
+                     (dolfin.inner(theta,theta_)-dolfin.inner(theta_n, theta_))*dx - sum(q_form))
+
+                problem = dolfin.NonlinearVariationalProblem(F,
+                                                             theta,
+                                                             bcs = bc_form,
+                                                             J = dolfin.derivative(F,theta))
+
+                solver = dolfin.NonlinearVariationalSolver(problem)
+                solver.parameters["newton_solver"] = NEWTON_PARAMS
+
+                return solver, theta, theta_n, theta_nminus1, h_n, h_nminus1, c_n
             
             methodswitch = {
                 'EHC':stefan_form_ehc,
                 'EHCpi':stefan_form_ehcpi, # (post iterative)
+                'EHCpi2s':stefan_form_ehcpi_2step, # (post iterative) two step (original)
+                'EHCpi2sTemp':stefan_form_ehcpi_2step_temp, # (post iterative) two step (original)
+                'EHCpi3s':stefan_form_ehcpi_3step, # (post iterative) three step (original)
                 'EHCpi-prj':stefan_form_ehcpi, # (post iterative)
-                'TTM':stefan_form_cao
+                'TTM':stefan_form_cao,
+                'AppHC':appHeat,
+                'AppHC_corr':appHeat_corr,
+                'Tapparentlinear':appHeat
             }
             return methodswitch.get(method,method+" is not implemented. Consider 'EHC', or 'TTM'.")
 
@@ -802,8 +1071,14 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
 
             return theta_vec
 
+        theta_test = dolfin.Expression("20*x[0] + theta_m - 10",
+                                       theta_m = prm.theta_m,
+                                       degree = 1)
+
+        theta_test = dolfin.interpolate(theta_test, T)
+        
         h_code = "theta < (theta_m - eps) ? cp_s*(theta - (theta_m - eps))" + \
-                 " : (theta >= (theta_m + eps) ? cp_m*2*eps + L_m + cp_l*(theta - (theta_m + eps))" + \
+                 " : (theta > (theta_m + eps) ? cp_m*2*eps + L_m + cp_l*(theta - (theta_m + eps))" + \
                  " : (cp_m + L_m/(2*eps))*(theta - (theta_m - eps)))"
 
         h_exp = dolfin.Expression(h_code,
@@ -815,6 +1090,20 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                                   cp_m = prm.cp_m,
                                   L_m = prm.L_m,
                                   degree = 1)
+
+        # h_exp = dolfin.Expression(h_code,
+        #                           theta = theta_test,
+        #                           theta_m = prm.theta_m,
+        #                           eps = 0,
+        #                           cp_s = 1,
+        #                           cp_l = 1,
+        #                           cp_m = 1,
+        #                           L_m = 1,
+        #                           degree = 1)
+
+        # dolfin.plot(h_exp, mesh = mesh)
+        # mplt.plt.show()
+        # exit()
 
         h_nplus1_exp = dolfin.Expression("h_nminus1 + c_n*(theta_nplus1 - theta_nminus1)",
                                          theta_nplus1 = dolfin.Constant(0.0),
@@ -836,6 +1125,96 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                                       cp_m = prm.cp_m,
                                       L_m = prm.L_m,
                                       degree = 0)
+
+        # Set initial values
+        # ------------------
+
+        for method in sim:
+
+            if (method == "AppHC") or (method == "Tapparentlinear"):
+
+                # Set limit for number of iterative corrections:
+                itr_corr_lim = 50
+
+                # Rename variables:
+                theta_nplus1 = sim[method][1]
+                theta_n = sim[method][2]
+                theta_nminus1 = sim[method][3]
+                h_n = sim[method][4]
+                h_nminus1 = sim[method][5]
+                c_app = sim[method][6]
+                theta_ast = sim[method][7]
+                h_ast = sim[method][8]
+
+                # Update enthalpy n-1:
+                h_exp.theta = theta_nminus1
+
+                # Define initial enthalpy:
+                h_nminus1.assign(dolfin.interpolate(h_exp,
+                                                    h_nminus1.function_space()))
+
+                # dolfin.plot(h_nminus1, label = "h n-1")
+
+                # Update enthalpy n:
+                h_exp.theta = theta_n
+
+                # Define initial enthalpy:
+                h_n.assign(dolfin.interpolate(h_exp,
+                                              h_n.function_space()))
+
+                h_ast.assign(h_n)
+
+                theta_ast.assign(theta_n)
+
+                # dolfin.plot(h_n, label = "h n")
+
+                #dolfin.plot(h_n - h_nminus1, label = "h n - h n-1")
+                #dolfin.plot(theta_n - theta_nminus1, label = "T n - T n-1")
+                
+                #dolfin.plot(c_app, label = "heat capacity")
+                # mplt.plt.legend()
+                # mplt.plt.show()
+
+            elif method == "AppHC_corr":
+
+                # Rename variables:
+                theta_nplus1 = sim[method][1]
+                theta_n = sim[method][2]
+                theta_nminus1 = sim[method][3]
+                h_n = sim[method][4]
+                h_nminus1 = sim[method][5]
+                c_app = sim[method][6]
+
+                # Update enthalpy n-1:
+                h_exp.theta = theta_nminus1
+
+                # Define initial enthalpy:
+                h_nminus1.assign(dolfin.interpolate(h_exp,
+                                                    h_nminus1.function_space()))
+
+                # dolfin.plot(h_nminus1, label = "h n-1")
+
+                # Update enthalpy n:
+                h_exp.theta = theta_n
+
+                # Define initial enthalpy:
+                h_n.assign(dolfin.interpolate(h_exp,
+                                              h_n.function_space()))
+
+                # dolfin.plot(h_n, label = "h n")
+
+                #dolfin.plot(h_n - h_nminus1, label = "h n - h n-1")
+                #dolfin.plot(theta_n - theta_nminus1, label = "T n - T n-1")
+
+                # Define nodal values of heat capacity:
+                c_n = (h_n.vector()[:] - h_nminus1.vector()[:])/ \
+                      (theta_n.vector()[:] - theta_nminus1.vector()[:])
+                
+                # dolfin.plot(c_app, label = "heat capacity")
+                # mplt.plt.legend()
+                # mplt.plt.show()
+
+        # ==================
                                          
 
         # Compute initial enthalpy of the system:
@@ -854,6 +1233,69 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
             # Define initial enthalpy:
             sim["EHCpi"][4].assign(dolfin.interpolate(h_exp,
                                                       sim["EHCpi"][4].function_space()))
+
+        # Set inital enthalpy for two step ehc pi:_
+        elif "EHCpi2s" in sim:
+
+            # Update enthalpy epxression n:
+            h_exp.theta = sim["EHCpi2s"][1]
+
+            # Define initial enthalpy:
+            sim["EHCpi2s"][3].assign(dolfin.interpolate(h_exp,
+                                                        sim["EHCpi2s"][3].function_space()))
+
+        elif "EHCpi2sTemp" in sim:
+
+            # Update enthalpy n-1:
+            h_exp.theta = sim["EHCpi2sTemp"][3]
+
+            # Define initial enthalpy:
+            sim["EHCpi2sTemp"][5].assign(dolfin.interpolate(h_exp,
+                                                            sim["EHCpi2sTemp"][5].function_space()))
+
+            # dolfin.plot(sim["EHCpi2sTemp"][5], label = "h n-1")
+
+            # Update enthalpy n:
+            h_exp.theta = sim["EHCpi2sTemp"][2]
+
+            # Define initial enthalpy:
+            sim["EHCpi2sTemp"][4].assign(dolfin.interpolate(h_exp,
+                                                            sim["EHCpi2sTemp"][4].function_space()))
+
+            # dolfin.plot(sim["EHCpi2sTemp"][4], label = "h n")
+
+            # Define nodal values of heat capacity:
+            # c_n = (sim["EHCpi2sTemp"][4].vector()[:] - sim["EHCpi2sTemp"][5].vector()[:])/ \
+            #       (sim["EHCpi2sTemp"][2].vector()[:] - sim["EHCpi2sTemp"][3].vector()[:])
+
+            #dolfin.plot(sim["EHCpi2sTemp"][4] - sim["EHCpi2sTemp"][5], label = "h n - h n-1")
+            dolfin.plot(sim["EHCpi2sTemp"][2] - sim["EHCpi2sTemp"][3], label = "T n - T n-1")
+
+            # Define heat capacity:
+            # sim["EHCpi2sTemp"][6].vector()[:] = c_n
+
+            #dolfin.plot(sim["EHCpi2sTemp"][6], label = "heat capacity")
+            # mplt.plt.legend()
+            #mplt.plt.show()
+            #exit()
+
+            # Set inital enthalpy for thtee step ehc pi:_
+        elif "EHCpi3s" in sim:
+
+            
+            # Update enthalpy epxression n-1:
+            h_exp.theta = sim["EHCpi3s"][3]
+
+            # Define initial enthalpy:
+            sim["EHCpi3s"][5].assign(dolfin.interpolate(h_exp,
+                                                        sim["EHCpi3s"][5].function_space()))
+
+            # Update enthalpy epxression n:
+            h_exp.theta = sim["EHCpi3s"][2]
+
+            # Define initial enthalpy:
+            sim["EHCpi3s"][4].assign(dolfin.interpolate(h_exp,
+                                                        sim["EHCpi3s"][4].function_space()))
 
         if "EHCpi-prj" in sim:
 
@@ -891,16 +1333,174 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
             # Solve FEM problem for given methods:
             for method in sim:
 
-                # dolfin.plot(dolfin.inner(dolfin.grad(sim["EHCpi"][4]),dolfin.grad(sim["EHCpi"][4]))/ \
-                #             dolfin.inner(dolfin.grad(sim["EHCpi"][2]),dolfin.grad(sim["EHCpi"][2])))
-                #dolfin.plot(dolfin.inner(dolfin.grad(sim["EHCpi"][4]),dolfin.grad(sim["EHCpi"][4])), label = "h")
-                # dolfin.plot(dolfin.inner(dolfin.grad(sim["EHCpi"][2]),dolfin.grad(sim["EHCpi"][2])),
-                #             label = "grad theta norm")
-                # mplt.plt.legend()
-                # mplt.plt.show()
-
-                # Solve problem:
+                # Solve problem (get theta_ast):
                 sim[method][0].solve()
+
+                # Use theta_ast for enthalpy
+                # --------------------------
+
+                # Update enthlapy in apparent heat capacity method:
+                if method == "AppHC":
+
+                    # Update enthalpy expression:
+                    h_exp.theta = theta_nplus1
+
+                    # Interpolate enthalpy:
+                    h_nplus1 = dolfin.interpolate(h_exp,
+                                                  h_n.function_space())
+
+                    # plotting:
+                    if itr_plt == itr_plt_lim and False:
+
+                        dolfin.plot(theta_nplus1, label = "corrected temperature")
+
+
+                        mplt.plt.legend()
+                        mplt.plt.show()
+
+                        try:
+                            itr_plt_lim = int(input("Number of steps to plot"))
+
+                            itr_plt = 0
+
+                        except ValueError:
+
+                            itr_plt_lim = itr_plt + 1
+
+                            pass
+
+                    itr_plt += 1
+
+                    # Prepare for next step:
+
+                    # Assign temperature (n-1):
+                    theta_nminus1.assign(theta_n)
+
+                    # Assign temperature (n):
+                    theta_n.assign(theta_nplus1)
+
+                    # Assign temperature for c_app:
+                    theta_ast.assign(theta_nplus1)
+
+                    # Assign enthalpy (n-1):
+                    h_nminus1.assign(h_n)
+
+                    # Assign enthalpy (n):
+                    h_n.assign(h_nplus1)
+
+                    # Assign enthalpy for c_app:
+                    h_ast.assign(h_nplus1)
+
+                # Iterative recalculation (Tapparentlinear):
+                elif method == "Tapparentlinear":
+
+                    # Update enthalpy expression:
+                    h_exp.theta = theta_nplus1
+
+                    # Interpolate enthalpy:
+                    h_nplus1 = dolfin.interpolate(h_exp,
+                                                  h_n.function_space())
+
+                    # Update C_app:
+                    theta_ast.assign(theta_nplus1)
+                    h_ast.assign(h_nplus1)
+
+                    # Iterative correction:
+                    itr_corr = 0
+
+                    err_h = 1.
+                    err_theta = 1.
+
+                    # Save results from previous corrective iteration:
+                    theta_ast_prit = dolfin.Function(theta_nplus1.function_space())
+                    h_ast_prit = dolfin.Function(h_n.function_space())
+
+                    # Iterative correction (change to False to switch off):
+                    while (err_h > 1e-3 or err_theta > 1e-3) and (itr_corr <= itr_corr_lim) and True:
+
+                        # Save values from previous corrective iteration:
+                        h_ast_prit.assign(h_ast)
+                        theta_ast_prit.assign(theta_nplus1)
+
+                        #dolfin.plot(c_app, label = "c app before correction")
+                        #dolfin.plot(theta_ast_prit, label = "theta before correction")
+
+                        #dolfin.plot(c_app, label = "c app after correction")
+                        #dolfin.plot(theta_nplus1, label = "theta after correction")
+                        #mplt.plt.legend()
+                        #mplt.plt.show()
+
+                        # Reiterate:
+                        sim[method][0].solve()
+
+                        # Update enthalpy expression:
+                        h_exp.theta = theta_nplus1
+
+                        # Interpolate enthalpy:
+                        h_ast.assign(dolfin.interpolate(h_exp,
+                                                      h_n.function_space()))
+
+                        # Update temp for C_app:
+                        theta_ast.assign(theta_nplus1)
+
+                        err_h = dolfin.errornorm(h_ast,h_ast_prit)/dolfin.norm(h_nplus1)
+                        err_theta = dolfin.errornorm(theta_ast,theta_ast_prit)/dolfin.norm(theta_ast)
+
+                        # Report metrics for stopping criteria:
+                        # print("enthalpy difference: {}".format(err_h) + \
+                        #       "\ntemperature difference: {}".format(err_theta))
+
+                        # Increment correction iterator:
+                        itr_corr += 1
+
+                    # print("itr = {}".format(itr_corr) +\
+                    #       "\nerr_h = {}".format(err_h) +\
+                    #       "\nerr_theta = {}".format(err_theta))
+
+                    # plotting:
+                    if itr_plt == itr_plt_lim and False:
+
+                        dolfin.plot(theta_nplus1, label = "corrected temperature")
+
+
+                        mplt.plt.legend()
+                        mplt.plt.show()
+
+                        try:
+                            itr_plt_lim = int(input("Number of steps to plot"))
+
+                            itr_plt = 0
+
+                        except ValueError:
+
+                            itr_plt_lim = itr_plt + 1
+
+                            pass
+
+                    itr_plt += 1
+
+                    # Prepare for next step:
+
+                    # Assign temperature (n-1):
+                    theta_nminus1.assign(theta_n)
+
+                    # Assign temperature (n):
+                    theta_n.assign(theta_nplus1)
+
+                    # Update temp for C_app:
+                    theta_ast.assign(theta_nplus1)
+
+                    # Assign enthalpy (n-1):
+                    h_nminus1.assign(h_n)
+
+                    # Assign enthalpy (n):
+                    h_n.assign(h_ast)
+
+                # Post-iterative correction:
+                elif method == "AppHC_corr":
+
+                    pass
+                # ==========================
 
                 # DBG (post iterative)/
                 if method == 'EHCpi' and True:
@@ -924,31 +1524,50 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                     # mplt.plt.show()
                     # exit()
 
-                    h_nplus1_fun = sim[method][5] + sim[method][6]*(sim[method][1] - sim[method][3])
+                    # dolfin.plot(sim[method][5], label = "h n-1")
+                    # dolfin.plot(sim[method][1] - sim[method][3], label = "delta theta")
+                    # dolfin.plot(sim[method][6]*(sim[method][1] - sim[method][3]), label = "C*delta theta")
+                    # dolfin.plot(sim[method][5] + sim[method][6]*(sim[method][1] - sim[method][3]), label = "h n+1")
+                    # mplt.plt.legend()
+                    # mplt.plt.show()
+
+                    delta_h = dolfin.project(sim[method][6]*(sim[method][1] - sim[method][3]),
+                                             sim[method][7])
+
+                    # project or interpolate
+                    h_nplus1 = dolfin.project(sim[method][5] + delta_h,
+                                              sim[method][7])
+
+                    # dolfin.plot(h_nplus1)
+
+                    h_nplus1 = dolfin.interpolate(h_nplus1,
+                                                  sim[method][1].function_space())
+
+                    # h_nplus1_fun = sim[method][5] + sim[method][6]*(sim[method][1] - sim[method][3]) # UFL
                     
-                    h_nplus1_dg = dolfin.project(h_nplus1_fun,
-                                                 sim[method][5].function_space())
+                    # h_nplus1_dg = dolfin.project(h_nplus1_fun,
+                    #                              sim[method][5].function_space())
 
-                    # h_nplus1 = dolfin.interpolate(h_nplus1_dg,
-                    #                               sim[method][1].function_space())
+                    # # h_nplus1 = dolfin.interpolate(h_nplus1_dg,
+                    # #                               sim[method][1].function_space())
 
-                    # Project enthalpy from DG1 to CG1:
-                    h_nplus1 = dolfin.project(h_nplus1_dg,
-                                              sim[method][1].function_space())
+                    # # Project enthalpy from DG1 to CG1:
+                    # h_nplus1 = dolfin.project(h_nplus1_dg,
+                    #                           sim[method][1].function_space())
 
-                    # Project enthalpy directly to CG1:
-                    h_nplus1_cg = dolfin.project(h_nplus1_fun,
-                                                 sim[method][1].function_space())
+                    # # Project enthalpy directly to CG1:
+                    # h_nplus1_cg = dolfin.project(h_nplus1_fun,
+                    #                              sim[method][1].function_space())
 
-                    # h_nplus1 = h_nplus1_dg
+                   # h_nplus1 = h_nplus1_dg
 
                     # Get temperature corrector:
                     theta_corr =  h_eff_inv_vec(h_nplus1.vector()[:])
 
                     # Correct temperature:
-                    sim[method][1].vector()[:] = theta_corr
+                    # sim[method][1].vector()[:] = theta_corr
 
-                    if itr_plt == itr_plt_lim and True:
+                    if itr_plt == itr_plt_lim and False:
                         c_n = dolfin.sqrt(dolfin.inner(dolfin.grad(sim["EHCpi"][4]), dolfin.grad(sim["EHCpi"][4]))/ \
                                           dolfin.inner(dolfin.grad(sim["EHCpi"][2]), dolfin.grad(sim["EHCpi"][2])))
 
@@ -960,14 +1579,17 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                         # mplt.plt.show()
                         
                         #dolfin.plot(sim["EHCpi"][5])
-                        dolfin.plot(h_nplus1_fun, label = "before dg projection")
-                        dolfin.plot(h_nplus1_dg, label = "dg1 proj")
-                        dolfin.plot(h_nplus1, label = "cg1 proj of dg1")
-                        mplt.plt.legend()
-                        mplt.plt.show()
+                        # dolfin.plot(h_nplus1_fun, label = "before dg projection")
+                        # dolfin.plot(h_nplus1_dg, label = "dg1 proj")
+                        # dolfin.plot(delta_h)
+                        # dolfin.plot(h_nplus1, label = "cg1 proj of dg1")
+                        # mplt.plt.legend()
+                        # mplt.plt.show()
 
                     
                         dolfin.plot(sim[method][1], label = method)
+                        dolfin.plot(sim[method][2], label = "theta n")
+                        dolfin.plot(sim[method][3], label = "theta n-1")
                         #dolfin.plot(sim['EHC'][1], label = 'EHC')
                         theta_analytic_proj=dolfin.project(theta_analytic,
                                                            T,
@@ -1017,6 +1639,208 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                     h_local = sim[method][3].vector().get_local()
 
                     sim[method][1].vector()[:] = h_eff_inv_vec(h_local)
+
+                elif method == 'EHCpi2s':
+
+                    # 1 Enthalpy update:
+
+                    # Update enthalpy function h_n:
+                    h_exp.theta = sim[method][1]
+
+                    h_nplus1 = (dolfin.interpolate(h_exp,
+                                                   sim[method][3].function_space()))
+
+                    # # Update temperature (n):
+                    # sim[method][2].assign(sim[method][1])
+
+                    # 2 Post-iterative correction:
+
+                    # Compute delta_h:
+                    dh_prj = dolfin.project(sim[method][4]*(sim[method][1]-sim[method][2]),
+                                            sim[method][3].function_space())
+
+                    # Define h_n+1:
+                    h_nplus1_prj = dolfin.project(sim[method][3] + dh_prj,
+                                                  sim[method][3].function_space())
+
+                    # Extract temperature correction:
+                    theta_corr = h_eff_inv_vec(h_nplus1_prj.vector()[:])
+
+                    # Correct temperature:
+                    #sim[method][1].vector()[:] = theta_corr
+
+                    # plotting:
+                    if itr_plt == itr_plt_lim and True:
+
+                        # 1 plot analytic solution:
+                        h_exp.theta = theta_analytic
+                        h_nplus1_analytic = dolfin.interpolate(h_exp,
+                                                               sim[method][3].function_space())
+
+                        #dolfin.plot(h_nplus1_analytic, label = "h n+1 analytic")
+
+                        theta_analytic.t += -dt
+                        h_exp.theta = theta_analytic
+                        h_n_analytic = dolfin.interpolate(h_exp,
+                                                          sim[method][3].function_space())
+                        theta_analytic.t += -dt
+
+                        dolfin.plot(h_n_analytic, label = "h n analytic")
+
+                        dolfin.plot(h_nplus1_analytic - h_n_analytic, label = "analytic dh CG1")
+
+                        dh_analytic_dg0 = dolfin.project(h_nplus1_analytic - h_n_analytic,
+                                                         sim[method][5])
+
+                        #dolfin.plot(dh_analytic_dg0)
+
+                        # 2 plot computed functions:
+                        
+                        # Computed dh
+                        dh_cg1 = dolfin.project(h_nplus1-sim[method][3],
+                                                sim[method][3].function_space())
+
+                        dh_dg0 = dolfin.project(h_nplus1-sim[method][3],
+                                                sim[method][5])
+
+                        dolfin.plot(sim[method][3], label = "h n computed")
+
+                        #dolfin.plot(h_nplus1, label = "h n+1 computed")
+
+                        dolfin.plot(dh_cg1, label = "dh computed")
+
+                        # 3 plot projected functions:
+                        
+                        dolfin.plot(dh_prj, label = "projected dh (correction)")
+
+                        # dolfin.plot(sim[method][3] + dh_prj, label = "h n+1 ufl")
+
+                        # dolfin.plot(h_nplus1_prj, label = "h n+1 projected") # same as ufl
+
+                        mplt.plt.legend()
+                        mplt.plt.show()
+
+                        try:
+                            itr_plt_lim = int(input("Number of steps to plot"))
+
+                            itr_plt = 0
+
+                        except ValueError:
+
+                            itr_plt_lim = itr_plt + 1
+
+                            pass
+
+                    itr_plt += 1
+
+                    # Update enthalpy:
+                    sim[method][3].assign(h_nplus1)
+
+                    # Update temperature:
+                    sim[method][2].assign(sim[method][1])
+
+                elif method == 'EHCpi2sTemp':
+
+                    mplt.plt.clf()
+
+                    #dolfin.plot(sim[method][1], label = "before correction")
+                    h_nplus1 = dolfin.Function(T)
+
+                    # Define enthalpy via niodal values:
+                    # h_nplus1.vector()[:] = sim[method][4].vector()[:] + sim[method][6].vector()[:]* \
+                    #                        (sim[method][1].vector()[:] - sim[method][2].vector()[:])
+
+                    h_exp.theta = sim[method][1]
+
+                    h_nplus1.assign(dolfin.interpolate(h_exp, T))
+
+                    # deltaT = dolfin.Function(T)
+
+                    # deltaT.vector()[:] = (sim[method][1].vector()[:] - sim[method][2].vector()[:])
+
+                    # deltaH = dolfin.Function(T)
+
+                    # deltaH.vector()[:] = (sim[method][4].vector()[:] - sim[method][5].vector()[:])
+
+                    #dolfin.plot(deltaH, label = "delta H n")
+                    #dolfin.plot(deltaT, label = "delta T n")
+                    #dolfin.plot(sim[method][6], label = "C n")
+                    #dolfin.plot(sim[method][4], label = "h n")
+                    # dolfin.plot(h_nplus1, label = "h n+1")
+                    # mplt.plt.legend()
+                    # mplt.plt.show()
+                    #exit()
+
+                    # Extract temperature correction:
+                    theta_corr = h_eff_inv_vec(h_nplus1.vector()[:])
+
+                    # Correct temperature:
+                    # sim[method][1].vector()[:] = theta_corr
+
+                    # plotting:
+                    if itr_plt == itr_plt_lim and True:
+
+                        dolfin.plot(sim[method][1], label = "corrected temperature")
+
+
+                        mplt.plt.legend()
+                        mplt.plt.show()
+
+                        try:
+                            itr_plt_lim = int(input("Number of steps to plot"))
+
+                            itr_plt = 0
+
+                        except ValueError:
+
+                            itr_plt_lim = itr_plt + 1
+
+                            pass
+
+                    itr_plt += 1
+
+                    # Prepare for next step:
+
+                    # Assign temperature (n-1):
+                    sim[method][3].assign(sim[method][2])
+
+                    # Assign temperature (n):
+                    sim[method][2].assign(sim[method][1])
+
+                    # Assign enthalpy (n-1):
+                    sim[method][5].assign(sim[method][4])
+
+                    # Assign enthalpy (n):
+                    sim[method][4].assign(h_nplus1)
+
+                    # Define nodal values of heat capacity:
+                    # c_n = (sim["EHCpi2sTemp"][4].vector()[:] - sim["EHCpi2sTemp"][5].vector()[:])/ \
+                    #       (sim["EHCpi2sTemp"][2].vector()[:] - sim["EHCpi2sTemp"][3].vector()[:])
+                    
+                    # Update heat capacity:
+                    #sim["EHCpi2sTemp"][6].vector()[:] = c_n
+                    #sim["EHCpi2sTemp"][6].assign((sim["EHCpi2sTemp"][4] - sim["EHCpi2sTemp"][5])/ \
+                        #step_(sim["EHCpi2sTemp"][2] - sim["EHCpi2sTemp"][3]))
+
+                elif method == 'EHCpi3s':
+
+                    # Update temperature (n-1):
+                    sim[method][3].assign(sim[method][2])
+
+                    # Update temperature (n):
+                    sim[method][2].assign(sim[method][1])
+
+                    # Update enthalpy function h_n-1:
+                    h_exp.theta = sim[method][3]
+
+                    sim[method][5].assign(dolfin.interpolate(h_exp,
+                                                             sim[method][5].function_space()))
+
+                    # Update enthalpy function h_n:
+                    h_exp.theta = sim[method][2]
+
+                    sim[method][4].assign(dolfin.interpolate(h_exp,
+                                                             sim[method][4].function_space()))
 
                 # Assign last step value for temperature:
                 else:
@@ -1132,15 +1956,15 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
         #======================
 
         # DBG/
-        for method in sim:
-            dolfin.plot(sim[method][1], label = method)
-        theta_analytic_proj=dolfin.project(theta_analytic,
-                                           T,
-                                           solver_type="cg",
-                                           preconditioner_type="hypre_amg")
-        dolfin.plot(theta_analytic_proj, label = "analytic")
-        mplt.plt.legend()
-        mplt.plt.show()
+        # for method in sim:
+        #     dolfin.plot(sim[method][1], label = method)
+        # theta_analytic_proj=dolfin.project(theta_analytic,
+        #                                    T,
+        #                                    solver_type="cg",
+        #                                    preconditioner_type="hypre_amg")
+        # dolfin.plot(theta_analytic_proj, label = "analytic")
+        # mplt.plt.legend()
+        # mplt.plt.show()
         # /DBG
 
         if SAVE_FRONT_POS_TXT:
@@ -1309,9 +2133,9 @@ def stability1p():
                  0.0009, 0.0008, 0.0007, 0.0006, 0.0005, 0.0004, 0.0003, 0.0002, 0.0001, \
                  0.00009, 0.00008, 0.00007, 0.00006, 0.00005, 0.00004, 0.00003, 0.00002, 0.00001]
 
-    #eps_range = [0.1, 0.05, 0.01]
+    # eps_range = [0.1, 0.05]
     
-    for method in ['EHC', 'EHCpi', 'TTM']:
+    for method in ['Tapparentlinear']:
 
         global METHODS
         METHODS = [method]
