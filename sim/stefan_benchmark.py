@@ -762,21 +762,24 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                 # Set boundary terms
                 q_form, q_form_n, bc_form = stefan_boundary_values(theta_,bcs)
 
-                # Define heat capacity (C_app):
-                c_app = (h_ast - h_nminus1)/(theta_ast - theta_nminus1)
+                # Define apparent heat capacity (temporal scheme):
+                # c_app = (h_ast - h_nminus1)/(theta_ast - theta_nminus1)
 
-                # Explicit time discretization:
-                F = (k_eff(theta_n, deg = 'C0')*dolfin.inner(dolfin.grad(theta), dolfin.grad(theta_))*dx + \
+                # Define apparent heat capacity (spatial scheme):
+                c_app = dolfin.sqrt(dolfin.inner(dolfin.grad(h_ast), dolfin.grad(h_ast))/ \
+                                  dolfin.inner(dolfin.grad(theta_ast), dolfin.grad(theta_ast)))
+
+                # Linear formulation (explicit time discretization):
+                F = (k_eff(theta_n, deg = 'C0')*dolfin.inner(dolfin.grad(_theta), dolfin.grad(theta_))*dx + \
                      prm.rho/dt*c_app* \
-                     (dolfin.inner(theta,theta_)-dolfin.inner(theta_n, theta_))*dx - sum(q_form))
-
-                problem = dolfin.NonlinearVariationalProblem(F,
-                                                             theta,
-                                                             bcs = bc_form,
-                                                             J = dolfin.derivative(F,theta))
-
-                solver = dolfin.NonlinearVariationalSolver(problem)
-                solver.parameters["newton_solver"] = NEWTON_PARAMS
+                     (dolfin.inner(_theta,theta_)-dolfin.inner(theta_n, theta_))*dx - sum(q_form))
+                
+                problem = dolfin.LinearVariationalProblem(dolfin.lhs(F),
+                                                          dolfin.rhs(F),
+                                                          theta,
+                                                          bcs = bc_form)
+                
+                solver = dolfin.LinearVariationalSolver(problem)
 
                 return solver, theta, theta_n, theta_nminus1, h_n, h_nminus1, c_app, theta_ast, h_ast
 
@@ -1162,6 +1165,7 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                 h_n.assign(dolfin.interpolate(h_exp,
                                               h_n.function_space()))
 
+                # Set inital values of h_ast, theta_ast (defining the apparent heat capacity):
                 h_ast.assign(h_n)
 
                 theta_ast.assign(theta_n)
@@ -1401,6 +1405,13 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                     h_nplus1 = dolfin.interpolate(h_exp,
                                                   h_n.function_space())
 
+                    # Get fixed enthalpy and temperature values for corrective iteration stopping criteria
+                    h_0 = dolfin.Function(h_ast.function_space())
+                    theta_0 = dolfin.Function(theta_ast.function_space())
+
+                    h_0.assign(h_ast)
+                    theta_0.assign(theta_ast)
+
                     # Update C_app:
                     theta_ast.assign(theta_nplus1)
                     h_ast.assign(h_nplus1)
@@ -1415,7 +1426,7 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                     theta_ast_prit = dolfin.Function(theta_nplus1.function_space())
                     h_ast_prit = dolfin.Function(h_n.function_space())
 
-                    # Iterative correction (change to False to switch off):
+                    # Iterative correction (change to False to switch off, return h_ast):
                     while (err_h > 1e-3 or err_theta > 1e-3) and (itr_corr <= itr_corr_lim) and True:
 
                         # Save values from previous corrective iteration:
@@ -1443,8 +1454,8 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
                         # Update temp for C_app:
                         theta_ast.assign(theta_nplus1)
 
-                        err_h = dolfin.errornorm(h_ast,h_ast_prit)/dolfin.norm(h_nplus1)
-                        err_theta = dolfin.errornorm(theta_ast,theta_ast_prit)/dolfin.norm(theta_ast)
+                        err_h = dolfin.errornorm(h_ast,h_ast_prit)/dolfin.norm(h_0)
+                        err_theta = dolfin.errornorm(theta_ast,theta_ast_prit)/dolfin.norm(theta_0)
 
                         # Report metrics for stopping criteria:
                         # print("enthalpy difference: {}".format(err_h) + \
@@ -1459,8 +1470,12 @@ def stefan_benchmark_sim(mesh, boundary, n, dx, ds, lambda_, theta_analytic, q_i
 
                     # plotting:
                     if itr_plt == itr_plt_lim and False:
+                        
+                        #dolfin.plot(theta_nplus1, label = "corrected temperature")
 
-                        dolfin.plot(theta_nplus1, label = "corrected temperature")
+                        dolfin.plot(c_app, label = "apparent heat capacity")
+
+                        #dolfin.plot(theta_nplus1 - theta_n, label = "temperature difference")
 
 
                         mplt.plt.legend()
@@ -2132,8 +2147,6 @@ def stability1p():
                  0.009, 0.008, 0.007, 0.006, 0.005, 0.004, 0.003, 0.002, 0.001, \
                  0.0009, 0.0008, 0.0007, 0.0006, 0.0005, 0.0004, 0.0003, 0.0002, 0.0001, \
                  0.00009, 0.00008, 0.00007, 0.00006, 0.00005, 0.00004, 0.00003, 0.00002, 0.00001]
-
-    # eps_range = [0.1, 0.05]
     
     for method in ['Tapparentlinear']:
 
